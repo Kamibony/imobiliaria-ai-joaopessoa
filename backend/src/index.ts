@@ -77,14 +77,15 @@ export const ingestPropertyData = onRequest(async (request, response) => {
         };
         snapshots: PropertySnapshot[]; // Must contain exactly one snapshot with the extracted status and financials
         ai_context: {
-          target_persona: string[];
+          target_persona: string[]; // MUST be generated exclusively in Brazilian Portuguese (pt-BR)
           investment_roi_estimated_percent: number;
-          local_advantage: string; // System prompt context for Gemini
+          local_advantage: string; // System prompt context for Gemini. MUST be generated exclusively in Brazilian Portuguese (pt-BR)
         };
       }
 
       Return ONLY the valid JSON object, without any markdown formatting, code blocks, or explanations.
       Ensure the output is parseable by JSON.parse().
+      IMPORTANT: The fields ai_context.target_persona and ai_context.local_advantage MUST be generated exclusively in Brazilian Portuguese (pt-BR).
 
       Data to extract:
       ${dataToParse}

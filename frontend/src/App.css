@@ -1,5 +1,5 @@
 #root {
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
@@ -33,6 +33,36 @@ h1 {
   .subtitle {
     color: #aaa;
   }
+}
+
+.tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.tab-btn {
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+  background-color: transparent;
+  color: #333;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab-btn {
+    color: #eee;
+    border-color: #555;
+  }
+}
+
+.tab-btn.active {
+  background-color: #646cff;
+  color: white;
+  border-color: #646cff;
 }
 
 .card {
@@ -140,5 +170,50 @@ h1 {
     background-color: #42161b;
     color: #ea868f;
     border-color: #842029;
+  }
+}
+
+/* Catalog Grid */
+.catalog-container {
+  width: 100%;
+}
+
+.property-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  text-align: left;
+}
+
+.property-card {
+  padding: 1.5rem;
+  background-color: #f9f9f9;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .property-card {
+    background-color: #1a1a1a;
+  }
+}
+
+.property-card h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+}
+
+.property-card p {
+  margin: 0;
+  color: #555;
+}
+
+@media (prefers-color-scheme: dark) {
+  .property-card p {
+    color: #ccc;
   }
 }
