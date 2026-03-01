@@ -1,34 +1,99 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [token, setToken] = useState('')
+  const [data, setData] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const handleAnalyzeAndSave = async () => {
+    if (!token) {
+      setMessage('Please provide a Bearer token.')
+      return
+    }
+    if (!data) {
+      setMessage('Please provide property data.')
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      // In a real environment, this URL would be the deployed Cloud Function URL.
+      // E.g., https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData
+      // Alternatively, we can use a relative path if deployed properly with rewrite rules.
+      const url = 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData'
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ data })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setMessage(`Success: ${result.message} (ID: ${result.propertyId})`)
+        setData('') // clear data on success
+      } else {
+        const errorText = await response.text()
+        setMessage(`Error: ${response.status} - ${errorText}`)
+      }
+    } catch (err) {
+      console.error(err)
+      setMessage(`Error: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
+    <div className="admin-container">
+      <h1>Imobiliária AI - Admin Dashboard</h1>
+      <p className="subtitle">Property Data Ingestion & Time Machine</p>
+
       <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
+        <div className="form-group">
+          <label htmlFor="token">Bearer Token (Authorization)</label>
+          <input
+            type="password"
+            id="token"
+            placeholder="Enter secure token"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="data">Unstructured Property Data</label>
+          <textarea
+            id="data"
+            placeholder="Paste raw text from PPT, PDF, WhatsApp, or websites here..."
+            value={data}
+            onChange={(e) => setData(e.target.value)}
+            rows={10}
+          />
+        </div>
+
+        <button
+          onClick={handleAnalyzeAndSave}
+          disabled={loading}
+          className="submit-btn"
+        >
+          {loading ? 'Analyzing & Saving...' : 'Analyze & Save'}
         </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
+
+        {message && (
+          <div className={`message ${message.startsWith('Success') ? 'success' : 'error'}`}>
+            {message}
+          </div>
+        )}
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </div>
   )
 }
 
