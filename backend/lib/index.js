@@ -78,12 +78,19 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
       You are an expert real estate data extractor for the Cabo Branco and Tambaú market in João Pessoa.
       Extract the provided data and return a strict JSON object that perfectly matches the following TypeScript interface:
 
+      export interface PropertySnapshot {
+        timestamp: string; // ISO 8601 date string
+        price_brl: number;
+        price_per_m2_brl: number;
+        status: 'na_planta' | 'em_construcao' | 'pronto';
+        source: string; // E.g., 'admin_upload', 'scraper'
+      }
+
       export interface Property {
         id: string; // unique identifier
         basic_info: {
           title: string;
           developer: string;
-          status: 'na_planta' | 'em_construcao' | 'pronto';
           delivery_date: string; // ISO 8601 date string
         };
         location: {
@@ -100,10 +107,7 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
           sun_orientation: 'nascente' | 'nascente_sul' | 'sul' | 'poente';
           bedrooms: number;
         };
-        financials: {
-          price_brl: number;
-          price_per_m2_brl: number;
-        };
+        snapshots: PropertySnapshot[]; // Must contain exactly one snapshot with the extracted status and financials
         ai_context: {
           target_persona: string[];
           investment_roi_estimated_percent: number;
@@ -131,15 +135,44 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
         }
         // Parse the JSON string into an object
         const propertyData = JSON.parse(responseText);
-        // The interface delivery_date is a Date, but Gemini will return a string.
-        // Convert it to a Firestore Timestamp or Date object.
+        // The interface delivery_date and timestamp are Dates, but Gemini will return a string.
+        // Convert them to Date objects.
         if (propertyData.basic_info && propertyData.basic_info.delivery_date) {
             propertyData.basic_info.delivery_date = new Date(propertyData.basic_info.delivery_date);
         }
-        // Save to Firestore
+        if (propertyData.snapshots && Array.isArray(propertyData.snapshots)) {
+            propertyData.snapshots.forEach((snap) => {
+                if (snap.timestamp) {
+                    snap.timestamp = new Date(snap.timestamp);
+                }
+                else {
+                    snap.timestamp = new Date(); // Fallback to current time
+                }
+                if (!snap.source) {
+                    snap.source = 'admin_upload'; // Default source
+                }
+            });
+        }
+        // Determine property ID
         const propertyId = propertyData.id || db.collection("properties").doc().id;
-        propertyData.id = propertyId; // Ensure ID is set in the data
-        await db.collection("properties").doc(propertyId).set(propertyData);
+        propertyData.id = propertyId;
+        const docRef = db.collection("properties").doc(propertyId);
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+            // Append the new snapshot to existing ones
+            const newSnapshots = propertyData.snapshots || [];
+            await docRef.update({
+                snapshots: admin.firestore.FieldValue.arrayUnion(...newSnapshots)
+            });
+            // Update other fields as well (using merge)
+            // Exclude snapshots from set to avoid overwriting all existing snapshots
+            const { snapshots, ...otherData } = propertyData;
+            await docRef.set(otherData, { merge: true });
+        }
+        else {
+            // Create new document
+            await docRef.set(propertyData);
+        }
         response.status(200).send({
             message: "Data successfully ingested and saved to Firestore",
             propertyId: propertyId,

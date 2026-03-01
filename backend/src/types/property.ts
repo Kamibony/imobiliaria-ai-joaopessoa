@@ -1,9 +1,16 @@
+export interface PropertySnapshot {
+  timestamp: Date;
+  price_brl: number;
+  price_per_m2_brl: number;
+  status: 'na_planta' | 'em_construcao' | 'pronto';
+  source: string; // e.g., 'admin_upload', 'scraper'
+}
+
 export interface Property {
   id: string; // unique identifier
   basic_info: {
     title: string;
     developer: string;
-    status: 'na_planta' | 'em_construcao' | 'pronto';
     delivery_date: Date; // corresponds to timestamp
   };
   location: {
@@ -20,10 +27,7 @@ export interface Property {
     sun_orientation: 'nascente' | 'nascente_sul' | 'sul' | 'poente';
     bedrooms: number;
   };
-  financials: {
-    price_brl: number;
-    price_per_m2_brl: number;
-  };
+  snapshots: PropertySnapshot[];
   ai_context: {
     target_persona: string[];
     investment_roi_estimated_percent: number;
