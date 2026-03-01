@@ -1,1 +1,3 @@
 node_modules/
+scraper/venv/
+scraper/__pycache__/
