@@ -159,3 +159,36 @@ export const ingestPropertyData = onRequest(async (request, response) => {
     response.status(500).send("Internal Server Error");
   }
 });
+
+// HTTP Cloud Function to get dynamic target URLs for the scraper
+export const getTargetUrls = onRequest(async (request, response) => {
+  // Require Bearer token in authorization header (same logic as ingestPropertyData)
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  if (!token) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const targetUrlsRef = db.collection("TargetURLs");
+    const snapshot = await targetUrlsRef.get();
+
+    const urls: string[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.url) {
+        urls.push(data.url);
+      }
+    });
+
+    response.status(200).json(urls);
+  } catch (error) {
+    console.error("Error fetching target URLs:", error);
+    response.status(500).send("Internal Server Error");
+  }
+});

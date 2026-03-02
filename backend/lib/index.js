@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ingestPropertyData = void 0;
+exports.getTargetUrls = exports.ingestPropertyData = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const vertexai_1 = require("@google-cloud/vertexai");
@@ -181,6 +181,36 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
     }
     catch (error) {
         console.error("Error ingesting property data:", error);
+        response.status(500).send("Internal Server Error");
+    }
+});
+// HTTP Cloud Function to get dynamic target URLs for the scraper
+exports.getTargetUrls = (0, https_1.onRequest)(async (request, response) => {
+    // Require Bearer token in authorization header (same logic as ingestPropertyData)
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    const token = authHeader.split("Bearer ")[1];
+    if (!token) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    try {
+        const targetUrlsRef = db.collection("TargetURLs");
+        const snapshot = await targetUrlsRef.get();
+        const urls = [];
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.url) {
+                urls.push(data.url);
+            }
+        });
+        response.status(200).json(urls);
+    }
+    catch (error) {
+        console.error("Error fetching target URLs:", error);
         response.status(500).send("Internal Server Error");
     }
 });

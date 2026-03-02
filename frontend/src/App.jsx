@@ -1,20 +1,44 @@
 import { useState, useEffect } from 'react'
-import { collection, onSnapshot } from 'firebase/firestore'
-import { db } from './firebase'
+import { collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore'
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
+import { db, auth } from './firebase'
 import './App.css'
 
 function App() {
-  const [activeTab, setActiveTab] = useState('ingestao') // 'ingestao' or 'catalogo'
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+
+  const [activeTab, setActiveTab] = useState('ingestao') // 'ingestao', 'catalogo', or 'fontes'
   const [token, setToken] = useState('')
   const [data, setData] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [properties, setProperties] = useState([])
+  const [targetUrls, setTargetUrls] = useState([])
+  const [newUrl, setNewUrl] = useState('')
+  const [urlMessage, setUrlMessage] = useState('')
 
   useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setProperties([]);
+      setTargetUrls([]);
+      return;
+    }
+
     // Listen to changes in the "properties" collection
     const propertiesRef = collection(db, 'properties');
-    const unsubscribe = onSnapshot(propertiesRef, (snapshot) => {
+    const unsubscribeProps = onSnapshot(propertiesRef, (snapshot) => {
       const propertiesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -22,9 +46,65 @@ function App() {
       setProperties(propertiesData);
     });
 
+    // Listen to changes in the "TargetURLs" collection
+    const targetUrlsRef = collection(db, 'TargetURLs');
+    const unsubscribeUrls = onSnapshot(targetUrlsRef, (snapshot) => {
+      const urlsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTargetUrls(urlsData);
+    });
+
     // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      unsubscribeProps();
+      unsubscribeUrls();
+    };
+  }, [user]);
+
+  const handleAddUrl = async (e) => {
+    e.preventDefault();
+    setUrlMessage('');
+    if (!newUrl) return;
+
+    try {
+      await addDoc(collection(db, 'TargetURLs'), { url: newUrl });
+      setNewUrl('');
+      setUrlMessage('URL adicionada com sucesso!');
+    } catch (err) {
+      console.error(err);
+      setUrlMessage('Erro ao adicionar URL.');
+    }
+  };
+
+  const handleDeleteUrl = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'TargetURLs', id));
+    } catch (err) {
+      console.error(err);
+      setUrlMessage('Erro ao deletar URL.');
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      console.error(err);
+      setAuthError('Falha no login. Verifique suas credenciais.');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleAnalyzeAndSave = async () => {
     if (!token) {
@@ -67,10 +147,49 @@ function App() {
     }
   }
 
+  if (authLoading) {
+    return <div className="admin-container"><p>Carregando...</p></div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="admin-container">
+        <h1>Login - Imobiliária AI</h1>
+        <div className="card">
+          <form onSubmit={handleLogin}>
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="password">Senha</label>
+              <input
+                type="password"
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            {authError && <div className="message error">{authError}</div>}
+            <button type="submit" className="submit-btn">Entrar</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-container">
       <h1>Imobiliária AI - Painel Administrativo</h1>
       <p className="subtitle">Ingestão de Dados e Time Machine</p>
+      <button onClick={handleLogout} className="logout-btn" style={{ marginBottom: '1rem' }}>Sair</button>
 
       <div className="tabs">
         <button
@@ -84,6 +203,12 @@ function App() {
           onClick={() => setActiveTab('catalogo')}
         >
           Catálogo de Imóveis (Dashboard)
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'fontes' ? 'active' : ''}`}
+          onClick={() => setActiveTab('fontes')}
+        >
+          Fontes (URLs)
         </button>
       </div>
 
@@ -163,6 +288,52 @@ function App() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'fontes' && (
+        <div className="card">
+          <h2>Gerenciar URLs Alvo</h2>
+
+          <form onSubmit={handleAddUrl} style={{ marginBottom: '2rem' }}>
+            <div className="form-group">
+              <label htmlFor="newUrl">Adicionar Nova URL</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="url"
+                  id="newUrl"
+                  placeholder="https://exemplo.com"
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  required
+                  style={{ flexGrow: 1 }}
+                />
+                <button type="submit" className="submit-btn" style={{ marginTop: 0, width: 'auto' }}>Adicionar</button>
+              </div>
+            </div>
+            {urlMessage && <div className={`message ${urlMessage.includes('Erro') ? 'error' : 'success'}`}>{urlMessage}</div>}
+          </form>
+
+          <div style={{ textAlign: 'left' }}>
+            <h3>URLs Cadastradas</h3>
+            {targetUrls.length === 0 ? (
+              <p>Nenhuma URL cadastrada.</p>
+            ) : (
+              <ul style={{ listStyleType: 'none', padding: 0 }}>
+                {targetUrls.map((target) => (
+                  <li key={target.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #ccc' }}>
+                    <span style={{ wordBreak: 'break-all', marginRight: '1rem' }}>{target.url}</span>
+                    <button
+                      onClick={() => handleDeleteUrl(target.id)}
+                      style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Deletar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </div>
