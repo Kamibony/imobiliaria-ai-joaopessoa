@@ -7,12 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData')
+GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
 WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
-
-TARGET_URLS = [
-    'https://portoinc.com.br/',
-    'https://somosghc.com/imovel/artus-vivence/'
-]
 
 # Standard User-Agent to avoid simple blocks
 HEADERS = {
@@ -76,7 +72,21 @@ def main():
     if not WEBHOOK_SECRET:
         print("Warning: WEBHOOK_SECRET is not set. The webhook request might fail due to lack of authorization.")
 
-    for url in TARGET_URLS:
+    print(f"Fetching dynamic target URLs from: {GET_TARGET_URLS_URL}")
+    auth_headers = {
+        'Authorization': f'Bearer {WEBHOOK_SECRET}'
+    }
+
+    try:
+        response = requests.get(GET_TARGET_URLS_URL, headers=auth_headers, timeout=15)
+        response.raise_for_status()
+        target_urls = response.json()
+        print(f"Retrieved {len(target_urls)} URLs to scrape.")
+    except Exception as e:
+        print(f"Failed to retrieve target URLs: {e}")
+        return
+
+    for url in target_urls:
         scrape_and_send(url)
         print("-" * 40)
 
