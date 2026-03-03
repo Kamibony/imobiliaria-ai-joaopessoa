@@ -2,6 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from duckduckgo_search import DDGS
 
 # Load environment variables
 load_dotenv()
@@ -10,33 +11,17 @@ WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
 ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls')
 WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
-SEARCH_API_KEY = os.environ.get('SEARCH_API_KEY', '')
-SEARCH_ENGINE_ID = os.environ.get('SEARCH_ENGINE_ID', '')
 
 def discover_new_urls():
-    if not SEARCH_API_KEY or not SEARCH_ENGINE_ID:
-        print("Skipping discovery: SEARCH_API_KEY or SEARCH_ENGINE_ID not set.")
-        return
-
-    print("Starting discovery agent: searching for new URLs...")
+    print("Starting discovery agent: searching for new URLs using DuckDuckGo...")
     query = "lançamento imobiliário Cabo Branco OR Tambaú João Pessoa"
-    search_url = "https://customsearch.googleapis.com/customsearch/v1"
-    params = {
-        'key': SEARCH_API_KEY,
-        'cx': SEARCH_ENGINE_ID,
-        'q': query
-    }
 
     try:
-        response = requests.get(search_url, params=params, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-
-        items = data.get("items", [])
-        discovered_urls = [item.get("link") for item in items if item.get("link")]
+        results = DDGS().text(query, max_results=15)
+        discovered_urls = [result.get("href") for result in results if result.get("href")]
 
         if not discovered_urls:
-            print("No URLs discovered from Google Search.")
+            print("No URLs discovered from DuckDuckGo Search.")
             return
 
         print(f"Discovered {len(discovered_urls)} URLs. Sending to webhook...")
@@ -51,7 +36,7 @@ def discover_new_urls():
         print(f"Success! Discovery webhook responded: {webhook_response.json()}")
 
     except requests.exceptions.RequestException as e:
-        print(f"Failed to discover or send new URLs: {e}")
+        print(f"Failed to send new URLs to webhook: {e}")
     except Exception as e:
         print(f"An unexpected error occurred during discovery: {e}")
 
