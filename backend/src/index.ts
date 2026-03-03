@@ -107,17 +107,13 @@ export const ingestPropertyData = onRequest(async (request, response) => {
       return;
     }
 
-    // Sanitize the response text to remove markdown formatting
-    let sanitizedText = responseText.trim();
-    if (sanitizedText.startsWith("```json")) {
-      sanitizedText = sanitizedText.substring(7);
-    } else if (sanitizedText.startsWith("```")) {
-      sanitizedText = sanitizedText.substring(3);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("No JSON object found in response:", responseText);
+      response.status(500).send("Internal Server Error: No JSON found");
+      return;
     }
-    if (sanitizedText.endsWith("```")) {
-      sanitizedText = sanitizedText.substring(0, sanitizedText.length - 3);
-    }
-    sanitizedText = sanitizedText.trim();
+    const sanitizedText = jsonMatch[0];
 
     // Parse the JSON string into an object
     let propertyData: any;
