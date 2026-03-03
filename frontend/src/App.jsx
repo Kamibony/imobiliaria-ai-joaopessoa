@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import 'leaflet/dist/leaflet.css'
 import { db, auth } from './firebase'
 import './App.css'
 
@@ -210,6 +213,12 @@ function App() {
         >
           Fontes (URLs)
         </button>
+        <button
+          className={`tab-btn ${activeTab === 'mapa' ? 'active' : ''}`}
+          onClick={() => setActiveTab('mapa')}
+        >
+          Mapa & Analytics
+        </button>
       </div>
 
       {activeTab === 'ingestao' && (
@@ -333,6 +342,96 @@ function App() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'mapa' && (
+        <div className="card" style={{ padding: '1rem', width: '100%' }}>
+          <h2>Mapa de Imóveis</h2>
+          <div style={{ height: '400px', width: '100%', marginBottom: '2rem', zIndex: 0 }}>
+            <MapContainer center={[-7.115, -34.863]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }}>
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {properties.filter(p => p.location?.coordinates?.lat && p.location?.coordinates?.lng).map(property => {
+                const snapshots = property.snapshots || [];
+                const sortedSnapshots = [...snapshots].sort((a, b) => {
+                  const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+                  const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+                  return dateB - dateA;
+                });
+                const latestSnapshot = sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
+
+                return (
+                  <Marker
+                    key={property.id}
+                    position={[property.location.coordinates.lat, property.location.coordinates.lng]}
+                  >
+                    <Popup>
+                      <strong>{property.basic_info?.title || 'Sem Título'}</strong><br />
+                      {latestSnapshot ? (
+                        <>Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl || 0)}</>
+                      ) : 'Sem preço'}
+                    </Popup>
+                  </Marker>
+                )
+              })}
+            </MapContainer>
+          </div>
+
+          <h2>Analytics: Preço por m² (Média)</h2>
+          <div style={{ height: '300px', width: '100%' }}>
+            {(() => {
+              const stats = {
+                'Cabo Branco': { sum: 0, count: 0 },
+                'Tambau': { sum: 0, count: 0 },
+                'Tambaú': { sum: 0, count: 0 } // Handle accent variation
+              };
+
+              properties.forEach(property => {
+                const neighborhood = property.location?.neighborhood;
+                if (!neighborhood) return;
+
+                const snapshots = property.snapshots || [];
+                const sortedSnapshots = [...snapshots].sort((a, b) => {
+                  const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+                  const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+                  return dateB - dateA;
+                });
+                const latestSnapshot = sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
+
+                if (latestSnapshot && latestSnapshot.price_per_m2_brl && stats[neighborhood]) {
+                  stats[neighborhood].sum += latestSnapshot.price_per_m2_brl;
+                  stats[neighborhood].count += 1;
+                }
+              });
+
+              const chartData = [
+                {
+                  name: 'Cabo Branco',
+                  Media: stats['Cabo Branco'].count > 0 ? Math.round(stats['Cabo Branco'].sum / stats['Cabo Branco'].count) : 0
+                },
+                {
+                  name: 'Tambaú',
+                  Media: (stats['Tambau'].count + stats['Tambaú'].count) > 0 ? Math.round((stats['Tambau'].sum + stats['Tambaú'].sum) / (stats['Tambau'].count + stats['Tambaú'].count)) : 0
+                }
+              ];
+
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => `R$ ${value}`} />
+                    <Tooltip formatter={(value) => [`R$ ${value}`, 'Média (R$/m²)']} />
+                    <Legend />
+                    <Bar dataKey="Media" fill="#8884d8" name="Média (R$/m²)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </div>
         </div>
       )}
