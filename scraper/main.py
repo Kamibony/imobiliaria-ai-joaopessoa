@@ -1,7 +1,7 @@
 import os
 import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 # Load environment variables
 load_dotenv()
@@ -10,42 +10,18 @@ WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
 WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
 
-# Standard User-Agent to avoid simple blocks
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-}
-
-def extract_visible_text(html_content):
-    """Extracts only the visible text from HTML content, cleaning up whitespace."""
-    soup = BeautifulSoup(html_content, 'html.parser')
-
-    # Remove script and style elements
-    for script_or_style in soup(['script', 'style']):
-        script_or_style.decompose()
-
-    # Get text
-    text = soup.get_text(separator=' ')
-
-    # Clean up excessive whitespaces
-    lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    text = ' '.join(chunk for chunk in chunks if chunk)
-
-    return text
-
-def scrape_and_send(url):
+def scrape_and_send(url, page):
     print(f"Starting to scrape: {url}")
     try:
-        # Fetch HTML
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
+        # Navigate to URL and wait for JS to render
+        page.goto(url, wait_until="networkidle", timeout=30000)
 
-        # Extract text
-        raw_text = extract_visible_text(response.text)
+        # Extract text using Playwright
+        raw_text = page.locator('body').inner_text()
 
         # Construct JSON payload
         payload = {
-            "source": "python_scraper",
+            "source": "python_playwright_scraper",
             "url": url,
             "raw_text": raw_text
         }
@@ -63,8 +39,10 @@ def scrape_and_send(url):
 
         print(f"Success! Data sent for: {url}")
 
+    except PlaywrightTimeoutError:
+        print(f"Timeout processing {url}")
     except requests.exceptions.RequestException as e:
-        print(f"Failure processing {url}: {e}")
+        print(f"Webhook failure processing {url}: {e}")
     except Exception as e:
         print(f"An unexpected error occurred for {url}: {e}")
 
@@ -86,9 +64,19 @@ def main():
         print(f"Failed to retrieve target URLs: {e}")
         return
 
-    for url in target_urls:
-        scrape_and_send(url)
-        print("-" * 40)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        )
+        page = context.new_page()
+
+        for url in target_urls:
+            scrape_and_send(url, page)
+            print("-" * 40)
+
+        context.close()
+        browser.close()
 
 if __name__ == "__main__":
     main()

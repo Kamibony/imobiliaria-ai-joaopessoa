@@ -25,6 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install Playwright Browsers
+        run: |
+          cd scraper
+          playwright install chromium
+
       - name: Run Scraper
         run: |
           cd scraper
