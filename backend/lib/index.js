@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTargetUrls = exports.ingestPropertyData = void 0;
+exports.getTargetUrls = exports.addDiscoveredUrls = exports.ingestPropertyData = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const vertexai_1 = require("@google-cloud/vertexai");
@@ -181,6 +181,65 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
     }
     catch (error) {
         console.error("Error ingesting property data:", error);
+        response.status(500).send("Internal Server Error");
+    }
+});
+// HTTP Cloud Function to add newly discovered target URLs
+exports.addDiscoveredUrls = (0, https_1.onRequest)(async (request, response) => {
+    // Require Bearer token in authorization header
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    const token = authHeader.split("Bearer ")[1];
+    if (!token) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    try {
+        const payload = request.body;
+        // Ensure payload is an array of strings
+        if (!Array.isArray(payload)) {
+            response.status(400).send("Invalid payload format. Expected an array of URLs.");
+            return;
+        }
+        const newUrls = payload.filter((url) => typeof url === "string");
+        if (newUrls.length === 0) {
+            response.status(400).send("No valid URLs provided in the array.");
+            return;
+        }
+        const targetUrlsRef = db.collection("TargetURLs");
+        // Get existing URLs to prevent duplicates
+        const snapshot = await targetUrlsRef.get();
+        const existingUrls = new Set();
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.url) {
+                existingUrls.add(data.url);
+            }
+        });
+        let addedCount = 0;
+        // Add missing URLs
+        const batch = db.batch();
+        for (const url of newUrls) {
+            if (!existingUrls.has(url)) {
+                const newDocRef = targetUrlsRef.doc();
+                batch.set(newDocRef, { url });
+                existingUrls.add(url); // Ensure we don't add duplicates from the request itself
+                addedCount++;
+            }
+        }
+        if (addedCount > 0) {
+            await batch.commit();
+        }
+        response.status(200).json({
+            message: `Successfully processed URLs. Added ${addedCount} new URLs.`,
+            addedCount
+        });
+    }
+    catch (error) {
+        console.error("Error adding discovered URLs:", error);
         response.status(500).send("Internal Server Error");
     }
 });

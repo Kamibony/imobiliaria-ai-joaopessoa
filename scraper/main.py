@@ -8,7 +8,52 @@ load_dotenv()
 
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData')
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
+ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls')
 WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
+SEARCH_API_KEY = os.environ.get('SEARCH_API_KEY', '')
+SEARCH_ENGINE_ID = os.environ.get('SEARCH_ENGINE_ID', '')
+
+def discover_new_urls():
+    if not SEARCH_API_KEY or not SEARCH_ENGINE_ID:
+        print("Skipping discovery: SEARCH_API_KEY or SEARCH_ENGINE_ID not set.")
+        return
+
+    print("Starting discovery agent: searching for new URLs...")
+    query = "lançamento imobiliário Cabo Branco OR Tambaú João Pessoa"
+    search_url = "https://customsearch.googleapis.com/customsearch/v1"
+    params = {
+        'key': SEARCH_API_KEY,
+        'cx': SEARCH_ENGINE_ID,
+        'q': query
+    }
+
+    try:
+        response = requests.get(search_url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        items = data.get("items", [])
+        discovered_urls = [item.get("link") for item in items if item.get("link")]
+
+        if not discovered_urls:
+            print("No URLs discovered from Google Search.")
+            return
+
+        print(f"Discovered {len(discovered_urls)} URLs. Sending to webhook...")
+
+        webhook_headers = {
+            'Authorization': f'Bearer {WEBHOOK_SECRET}',
+            'Content-Type': 'application/json'
+        }
+
+        webhook_response = requests.post(ADD_DISCOVERED_URLS_URL, json=discovered_urls, headers=webhook_headers, timeout=15)
+        webhook_response.raise_for_status()
+        print(f"Success! Discovery webhook responded: {webhook_response.json()}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to discover or send new URLs: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred during discovery: {e}")
 
 def scrape_and_send(url, page):
     print(f"Starting to scrape: {url}")
@@ -49,6 +94,9 @@ def scrape_and_send(url, page):
 def main():
     if not WEBHOOK_SECRET:
         print("Warning: WEBHOOK_SECRET is not set. The webhook request might fail due to lack of authorization.")
+
+    # Run discovery agent before fetching target URLs
+    discover_new_urls()
 
     print(f"Fetching dynamic target URLs from: {GET_TARGET_URLS_URL}")
     auth_headers = {
