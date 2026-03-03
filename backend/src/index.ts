@@ -11,7 +11,7 @@ const project = process.env.GCLOUD_PROJECT || "imobiliaria-ai-joaopessoa";
 const location = "us-central1"; // Assuming us-central1 for Vertex AI
 const vertexAi = new VertexAI({ project, location });
 const generativeModel = vertexAi.getGenerativeModel({
-  model: "gemini-1.5-pro",
+  model: "gemini-2.5-flash",
 });
 
 // Empty HTTP Cloud Function serving as webhook for incoming market data
