@@ -48,8 +48,8 @@ export const ingestPropertyData = onRequest(async (request, response) => {
 
       export interface PropertySnapshot {
         timestamp: string; // ISO 8601 date string
-        price_brl: number;
-        price_per_m2_brl: number;
+        price_brl: number | null;
+        price_per_m2_brl: number | null;
         status: 'na_planta' | 'em_construcao' | 'pronto';
         source: string; // E.g., 'admin_upload', 'scraper'
       }
@@ -58,8 +58,8 @@ export const ingestPropertyData = onRequest(async (request, response) => {
         id: string; // unique identifier
         basic_info: {
           title: string;
-          developer: string;
-          delivery_date: string; // ISO 8601 date string
+          developer: string | null;
+          delivery_date: string | null; // ISO 8601 date string
         };
         location: {
           neighborhood: 'Cabo Branco' | 'Tambau';
@@ -71,9 +71,9 @@ export const ingestPropertyData = onRequest(async (request, response) => {
           };
         };
         features: {
-          area_m2: number;
+          area_m2: number | null;
           sun_orientation: 'nascente' | 'nascente_sul' | 'sul' | 'poente';
-          bedrooms: number;
+          bedrooms: number | null;
         };
         snapshots: PropertySnapshot[]; // Must contain exactly one snapshot with the extracted status and financials
         ai_context: {
@@ -86,6 +86,7 @@ export const ingestPropertyData = onRequest(async (request, response) => {
       Return ONLY the valid JSON object, without any markdown formatting, code blocks, or explanations.
       Ensure the output is parseable by JSON.parse().
       IMPORTANT: The fields ai_context.target_persona and ai_context.local_advantage MUST be generated exclusively in Brazilian Portuguese (pt-BR).
+      Strict Instruction: If any specific data point (like price, area, date, or developer) is completely missing from the text, DO NOT apologize, explain, or add conversational text. Simply assign null (or 0 for numbers) to that specific field and return the valid JSON.
 
       Data to extract:
       ${dataToParse}
