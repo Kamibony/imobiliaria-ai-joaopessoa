@@ -134,8 +134,31 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
             response.status(500).send("Failed to parse data");
             return;
         }
+        // Sanitize the response text to remove markdown formatting
+        let sanitizedText = responseText.trim();
+        if (sanitizedText.startsWith("```json")) {
+            sanitizedText = sanitizedText.substring(7);
+        }
+        else if (sanitizedText.startsWith("```")) {
+            sanitizedText = sanitizedText.substring(3);
+        }
+        if (sanitizedText.endsWith("```")) {
+            sanitizedText = sanitizedText.substring(0, sanitizedText.length - 3);
+        }
+        sanitizedText = sanitizedText.trim();
         // Parse the JSON string into an object
-        const propertyData = JSON.parse(responseText);
+        let propertyData;
+        try {
+            propertyData = JSON.parse(sanitizedText);
+        }
+        catch (parseError) {
+            console.error("Failed to parse Gemini response as JSON.");
+            console.error("Raw responseText:", responseText);
+            console.error("Sanitized text:", sanitizedText);
+            console.error("Parse error:", parseError);
+            response.status(500).send("Internal Server Error: Failed to parse generated data");
+            return;
+        }
         // The interface delivery_date and timestamp are Dates, but Gemini will return a string.
         // Convert them to Date objects.
         if (propertyData.basic_info && propertyData.basic_info.delivery_date) {
