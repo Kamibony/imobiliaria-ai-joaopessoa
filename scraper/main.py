@@ -8,50 +8,7 @@ load_dotenv()
 
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData')
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
-ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls')
 WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
-
-def discover_urls_from_zap(page):
-    print("Starting discovery agent: searching for new URLs using ZAP Imoveis Portal Index...")
-    z_cabo_branco = "https://www.zapimoveis.com.br/venda/imoveis/pb+joao-pessoa+bairros+cabo-branco/"
-    z_tambau = "https://www.zapimoveis.com.br/venda/imoveis/pb+joao-pessoa+bairros+tambau/"
-
-    seed_urls = [z_cabo_branco, z_tambau]
-    discovered_urls = []
-
-    for seed_url in seed_urls:
-        print(f"Scraping index: {seed_url}")
-        try:
-            page.goto(seed_url, wait_until="domcontentloaded", timeout=60000)
-            # Wait for property cards to load, often containing /imovel/ in their links
-            page.wait_for_selector('a[href*="/imovel/"]', timeout=30000)
-
-            links = page.locator('a[href*="/imovel/"]').evaluate_all('''(elements) => elements.map(el => el.href)''')
-            for link in links:
-                if link not in discovered_urls:
-                    discovered_urls.append(link)
-        except Exception as e:
-            print(f"Failed to extract from {seed_url}: {e}")
-
-    if not discovered_urls:
-        print("No URLs discovered from ZAP Imoveis Index.")
-        return
-
-    print(f"Discovered {len(discovered_urls)} URLs. Sending to webhook...")
-
-    webhook_headers = {
-        'Authorization': f'Bearer {WEBHOOK_SECRET}',
-        'Content-Type': 'application/json'
-    }
-
-    try:
-        webhook_response = requests.post(ADD_DISCOVERED_URLS_URL, json=discovered_urls, headers=webhook_headers, timeout=15)
-        webhook_response.raise_for_status()
-        print(f"Success! Discovery webhook responded: {webhook_response.json()}")
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to send new URLs to webhook: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred during discovery: {e}")
 
 def scrape_and_send(url, page):
     print(f"Starting to scrape: {url}")
@@ -108,9 +65,6 @@ def main():
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         )
         page = context.new_page()
-
-        # Run discovery agent before fetching target URLs
-        discover_urls_from_zap(page)
 
         print(f"Fetching dynamic target URLs from: {GET_TARGET_URLS_URL}")
         auth_headers = {
