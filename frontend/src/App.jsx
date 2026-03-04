@@ -3,9 +3,73 @@ import { collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firesto
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { db, auth } from './firebase'
 import './App.css'
+
+const PropertyCard = ({ property, latestSnapshot }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const aiContext = property.ai_context;
+
+  return (
+    <div className="property-card">
+      <h3>{property.basic_info?.title || 'Sem Título'}</h3>
+      <p><strong>Construtora:</strong> {property.basic_info?.developer || 'N/A'}</p>
+      <p><strong>Bairro:</strong> {property.location?.neighborhood || 'N/A'}</p>
+      {latestSnapshot ? (
+        <>
+          <p><strong>Preço:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl || 0)}</p>
+          <p><strong>Status:</strong> {latestSnapshot.status || 'N/A'}</p>
+        </>
+      ) : (
+        <p><em>Sem dados financeiros/status no momento</em></p>
+      )}
+
+      <button className="expand-btn" onClick={() => setIsExpanded(!isExpanded)}>
+        {isExpanded ? 'Ocultar Detalhes' : 'Ver Detalhes'}
+      </button>
+
+      {isExpanded && (
+        <div className="expanded-details">
+          <h4>Detalhes Físicos</h4>
+          <p><strong>Área:</strong> {property.features?.area_m2 ? `${property.features.area_m2} m²` : 'N/A'}</p>
+          <p><strong>Quartos:</strong> {property.features?.bedrooms || 'N/A'}</p>
+          <p><strong>Posição Solar:</strong> {property.features?.sun_orientation || 'N/A'}</p>
+          <p><strong>Distância do Mar:</strong> {property.location?.distance_to_beach_meters != null ? `${property.location.distance_to_beach_meters} m` : 'N/A'}</p>
+
+          {aiContext && (
+            <div className="ai-insights">
+              <h4>✨ AI Insights</h4>
+
+              <div className="roi-badge">
+                <strong>ROI Estimado:</strong> {aiContext.investment_roi_estimated_percent != null ? `${aiContext.investment_roi_estimated_percent}%` : 'N/A'}
+              </div>
+
+              {aiContext.target_persona && aiContext.target_persona.length > 0 && (
+                <div className="persona-tags">
+                  <strong>Público-alvo:</strong>
+                  <div className="tags-container">
+                    {aiContext.target_persona.map((persona, index) => (
+                      <span key={index} className="persona-tag">{persona}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiContext.local_advantage && (
+                <div className="local-advantage-callout">
+                  <span>💡</span>
+                  <p>{aiContext.local_advantage}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 function App() {
   const [user, setUser] = useState(null)
@@ -23,6 +87,74 @@ function App() {
   const [targetUrls, setTargetUrls] = useState([])
   const [newUrl, setNewUrl] = useState('')
   const [urlMessage, setUrlMessage] = useState('')
+
+  const [filterBairro, setFilterBairro] = useState('All')
+  const [filterStatus, setFilterStatus] = useState('All')
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'na_planta': return '#dc143c'; // Crimson
+      case 'em_construcao': return '#ff8c00'; // Orange
+      case 'pronto': return '#28a745'; // Green
+      default: return '#808080'; // Gray
+    }
+  }
+
+  const createCustomIcon = (status) => {
+    const color = getStatusColor(status);
+    return L.divIcon({
+      className: 'custom-marker',
+      html: `<div style="background-color: ${color}; width: 100%; height: 100%; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+      popupAnchor: [0, -10]
+    });
+  };
+
+  const getLatestSnapshot = (property) => {
+    const snapshots = property.snapshots || [];
+    const sortedSnapshots = [...snapshots].sort((a, b) => {
+      const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+      const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+      return dateB - dateA;
+    });
+    return sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
+  }
+
+  const filteredProperties = useMemo(() => {
+    return properties.filter(p => {
+      const latestSnapshot = getLatestSnapshot(p);
+      const bairroMatch = filterBairro === 'All' ||
+                          (p.location?.neighborhood === filterBairro) ||
+                          (p.location?.neighborhood === 'Tambaú' && filterBairro === 'Tambau') ||
+                          (p.location?.neighborhood === 'Tambau' && filterBairro === 'Tambaú');
+      const statusMatch = filterStatus === 'All' ||
+                          (latestSnapshot && latestSnapshot.status === filterStatus);
+      return bairroMatch && statusMatch;
+    });
+  }, [properties, filterBairro, filterStatus]);
+
+  const renderFilterBar = () => (
+    <div className="filter-bar">
+      <div className="form-group inline">
+        <label htmlFor="filterBairro">Bairro:</label>
+        <select id="filterBairro" value={filterBairro} onChange={(e) => setFilterBairro(e.target.value)}>
+          <option value="All">Todos</option>
+          <option value="Cabo Branco">Cabo Branco</option>
+          <option value="Tambau">Tambaú</option>
+        </select>
+      </div>
+      <div className="form-group inline">
+        <label htmlFor="filterStatus">Status:</label>
+        <select id="filterStatus" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="All">Todos</option>
+          <option value="na_planta">Na Planta</option>
+          <option value="em_construcao">Em Construção</option>
+          <option value="pronto">Pronto</option>
+        </select>
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -263,36 +395,14 @@ function App() {
 
       {activeTab === 'catalogo' && (
         <div className="catalog-container">
-          {properties.length === 0 ? (
+          {renderFilterBar()}
+          {filteredProperties.length === 0 ? (
             <p>Nenhum imóvel encontrado.</p>
           ) : (
             <div className="property-grid">
-              {properties.map(property => {
-                // Get the latest snapshot
-                const snapshots = property.snapshots || [];
-                // Sort snapshots by timestamp descending
-                const sortedSnapshots = [...snapshots].sort((a, b) => {
-                  const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
-                  const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
-                  return dateB - dateA;
-                });
-
-                const latestSnapshot = sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
-
+              {filteredProperties.map(property => {
                 return (
-                  <div key={property.id} className="property-card">
-                    <h3>{property.basic_info?.title || 'Sem Título'}</h3>
-                    <p><strong>Construtora:</strong> {property.basic_info?.developer || 'N/A'}</p>
-                    <p><strong>Bairro:</strong> {property.location?.neighborhood || 'N/A'}</p>
-                    {latestSnapshot ? (
-                      <>
-                        <p><strong>Preço:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl || 0)}</p>
-                        <p><strong>Status:</strong> {latestSnapshot.status || 'N/A'}</p>
-                      </>
-                    ) : (
-                      <p><em>Sem dados financeiros/status no momento</em></p>
-                    )}
-                  </div>
+                  <PropertyCard key={property.id} property={property} latestSnapshot={getLatestSnapshot(property)} />
                 );
               })}
             </div>
@@ -349,31 +459,33 @@ function App() {
       {activeTab === 'mapa' && (
         <div className="card" style={{ padding: '1rem', width: '100%' }}>
           <h2>Mapa de Imóveis</h2>
+          {renderFilterBar()}
           <div style={{ height: '400px', width: '100%', marginBottom: '2rem', zIndex: 0 }}>
             <MapContainer center={[-7.115, -34.863]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }}>
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {properties.filter(p => p.location?.coordinates?.lat && p.location?.coordinates?.lng).map(property => {
-                const snapshots = property.snapshots || [];
-                const sortedSnapshots = [...snapshots].sort((a, b) => {
-                  const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
-                  const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
-                  return dateB - dateA;
-                });
-                const latestSnapshot = sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
+              {filteredProperties.filter(p => p.location?.coordinates?.lat && p.location?.coordinates?.lng).map(property => {
+                const latestSnapshot = getLatestSnapshot(property);
 
                 return (
                   <Marker
                     key={property.id}
                     position={[property.location.coordinates.lat, property.location.coordinates.lng]}
+                    icon={createCustomIcon(latestSnapshot?.status)}
                   >
                     <Popup>
                       <strong>{property.basic_info?.title || 'Sem Título'}</strong><br />
                       {latestSnapshot ? (
-                        <>Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl || 0)}</>
-                      ) : 'Sem preço'}
+                        <>
+                          Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl || 0)}<br />
+                          Status: {latestSnapshot.status || 'N/A'}<br />
+                        </>
+                      ) : <>Sem preço<br /></> }
+                      {property.ai_context?.investment_roi_estimated_percent != null && (
+                        <span>ROI Estimado: {property.ai_context.investment_roi_estimated_percent}%</span>
+                      )}
                     </Popup>
                   </Marker>
                 )
@@ -390,17 +502,11 @@ function App() {
                 'Tambaú': { sum: 0, count: 0 } // Handle accent variation
               };
 
-              properties.forEach(property => {
+              filteredProperties.forEach(property => {
                 const neighborhood = property.location?.neighborhood;
                 if (!neighborhood) return;
 
-                const snapshots = property.snapshots || [];
-                const sortedSnapshots = [...snapshots].sort((a, b) => {
-                  const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
-                  const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
-                  return dateB - dateA;
-                });
-                const latestSnapshot = sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
+                const latestSnapshot = getLatestSnapshot(property);
 
                 if (latestSnapshot && latestSnapshot.price_per_m2_brl && stats[neighborhood]) {
                   stats[neighborhood].sum += latestSnapshot.price_per_m2_brl;
