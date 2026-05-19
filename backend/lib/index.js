@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTargetUrls = exports.addDiscoveredUrls = exports.ingestPropertyData = void 0;
+exports.getTargetUrls = exports.addDiscoveredUrls = exports.filterDiscoveredUrls = exports.ingestPropertyData = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const vertexai_1 = require("@google-cloud/vertexai");
@@ -56,8 +56,8 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
         return;
     }
     const token = authHeader.split("Bearer ")[1];
-    // Normally you would verify the token here, but for this exercise we just require it
-    if (!token) {
+    const expectedSecret = process.env.WEBHOOK_SECRET;
+    if (!token || (expectedSecret && token !== expectedSecret)) {
         response.status(401).send("Unauthorized");
         return;
     }
@@ -204,6 +204,84 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
     }
 });
 // HTTP Cloud Function to add newly discovered target URLs
+// HTTP Cloud Function to filter discovered URLs using Gemini
+exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120 }, async (request, response) => {
+    // Require Bearer token in authorization header
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    const token = authHeader.split("Bearer ")[1];
+    const expectedSecret = process.env.WEBHOOK_SECRET;
+    if (!token || (expectedSecret && token !== expectedSecret)) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    try {
+        const payload = request.body;
+        // Ensure payload is an array of objects
+        if (!Array.isArray(payload)) {
+            response.status(400).send("Invalid payload format. Expected an array of link objects.");
+            return;
+        }
+        const linksToFilter = payload.filter((link) => typeof link === "object" && link !== null && link.href);
+        if (linksToFilter.length === 0) {
+            response.status(400).send("No valid links provided in the array.");
+            return;
+        }
+        const prompt = `
+      You are an expert real estate data assistant focused on the João Pessoa market, specifically the coastal neighborhoods of Cabo Branco, Tambaú, and Bessa.
+      I will provide you a JSON list of links extracted from developer websites.
+      Your task is to filter this list and return ONLY the URLs that likely point to individual property/project detail pages in our target geographic area.
+      Discard any noise such as contact pages, about us, main index pages, blog posts, generic searches, or projects located in other cities or states.
+
+      Return ONLY a raw JSON array of strings containing the selected URLs, and nothing else. No markdown formatting, no explanations.
+      Ensure the output is parseable by JSON.parse().
+
+      Links to evaluate:
+      ${JSON.stringify(linksToFilter, null, 2)}
+    `;
+        const filterModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const result = await filterModel.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+                responseMimeType: "application/json",
+            },
+        });
+        const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!responseText) {
+            console.error("No response text from Gemini in filterDiscoveredUrls");
+            response.status(500).send("Failed to filter URLs");
+            return;
+        }
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+            console.error("No JSON array found in response:", responseText);
+            response.status(500).send("Internal Server Error: No JSON array found");
+            return;
+        }
+        const sanitizedText = jsonMatch[0];
+        // Parse the JSON string into an object
+        let filteredUrls = [];
+        try {
+            filteredUrls = JSON.parse(sanitizedText);
+        }
+        catch (parseError) {
+            console.error("Failed to parse Gemini response as JSON in filterDiscoveredUrls.");
+            console.error("Raw responseText:", responseText);
+            console.error("Sanitized text:", sanitizedText);
+            console.error("Parse error:", parseError);
+            response.status(500).send("Internal Server Error: Failed to parse filtered URLs");
+            return;
+        }
+        response.status(200).json(filteredUrls);
+    }
+    catch (error) {
+        console.error("Error filtering URLs:", error);
+        response.status(500).send("Internal Server Error");
+    }
+});
 exports.addDiscoveredUrls = (0, https_1.onRequest)(async (request, response) => {
     // Require Bearer token in authorization header
     const authHeader = request.headers.authorization;
@@ -212,7 +290,8 @@ exports.addDiscoveredUrls = (0, https_1.onRequest)(async (request, response) => 
         return;
     }
     const token = authHeader.split("Bearer ")[1];
-    if (!token) {
+    const expectedSecret = process.env.WEBHOOK_SECRET;
+    if (!token || (expectedSecret && token !== expectedSecret)) {
         response.status(401).send("Unauthorized");
         return;
     }
@@ -271,7 +350,8 @@ exports.getTargetUrls = (0, https_1.onRequest)(async (request, response) => {
         return;
     }
     const token = authHeader.split("Bearer ")[1];
-    if (!token) {
+    const expectedSecret = process.env.WEBHOOK_SECRET;
+    if (!token || (expectedSecret && token !== expectedSecret)) {
         response.status(401).send("Unauthorized");
         return;
     }
