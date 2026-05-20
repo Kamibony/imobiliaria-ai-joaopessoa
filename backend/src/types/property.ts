@@ -14,12 +14,12 @@ export interface Property {
     delivery_date: Date | null; // corresponds to timestamp
   };
   location: {
-    neighborhood: 'Cabo Branco' | 'Tambau';
+    neighborhood: 'Cabo Branco' | 'Tambau' | 'Bessa';
     position_to_sea: 'beira_mar' | 'quadra_mar' | 'miolo';
     distance_to_beach_meters: number;
     coordinates: {
-      lat: number;
-      lng: number;
+      lat: number | null;
+      lng: number | null;
     };
   };
   features: {
