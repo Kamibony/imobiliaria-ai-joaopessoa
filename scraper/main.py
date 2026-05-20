@@ -109,9 +109,10 @@ def discovery_phase(page):
             print(f"An unexpected error occurred during discovery on {seed_url}: {e}")
 
     if all_filtered_urls:
-        print(f"Total AI-discovered URLs: {len(all_filtered_urls)}. Pushing to backend...")
+        normalized_filtered_urls = [url.strip().rstrip('/') for url in all_filtered_urls]
+        print(f"Total AI-discovered URLs: {len(normalized_filtered_urls)}. Pushing to backend...")
         try:
-            add_response = requests.post(ADD_DISCOVERED_URLS_URL, json=all_filtered_urls, headers=auth_headers, timeout=30)
+            add_response = requests.post(ADD_DISCOVERED_URLS_URL, json=normalized_filtered_urls, headers=auth_headers, timeout=30)
             add_response.raise_for_status()
             result = add_response.json()
             print(f"Successfully pushed discovered URLs: {result.get('message')}")
@@ -147,7 +148,8 @@ def main():
         try:
             response = requests.get(GET_TARGET_URLS_URL, headers=auth_headers, timeout=15)
             response.raise_for_status()
-            target_urls = response.json()
+            raw_target_urls = response.json()
+            target_urls = [url.strip().rstrip('/') for url in raw_target_urls]
             print(f"Retrieved {len(target_urls)} URLs to scrape.")
         except Exception as e:
             print(f"Failed to retrieve target URLs: {e}")

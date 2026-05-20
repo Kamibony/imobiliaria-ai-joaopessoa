@@ -204,7 +204,8 @@ function App() {
     if (!newUrl) return;
 
     try {
-      await addDoc(collection(db, 'TargetURLs'), { url: newUrl });
+      const normalizedUrl = newUrl.trim().replace(/\/$/, "");
+      await addDoc(collection(db, 'TargetURLs'), { url: normalizedUrl });
       setNewUrl('');
       setUrlMessage('URL adicionada com sucesso!');
     } catch (err) {

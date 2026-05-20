@@ -94,12 +94,12 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
           delivery_date: string | null; // ISO 8601 date string
         };
         location: {
-          neighborhood: 'Cabo Branco' | 'Tambau';
+          neighborhood: 'Cabo Branco' | 'Tambau' | 'Bessa';
           position_to_sea: 'beira_mar' | 'quadra_mar' | 'miolo';
           distance_to_beach_meters: number;
           coordinates: {
-            lat: number;
-            lng: number;
+            lat: number | null;
+            lng: number | null;
           };
         };
         features: {
@@ -176,6 +176,42 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
         // Determine property ID
         const propertyId = propertyData.id || db.collection("properties").doc().id;
         propertyData.id = propertyId;
+        // Coordinate Fallback Logic
+        if (propertyData.location) {
+            if (propertyData.location.coordinates) {
+                if (propertyData.location.coordinates.lat == null || propertyData.location.coordinates.lng == null) {
+                    const neighborhood = propertyData.location.neighborhood;
+                    if (neighborhood === 'Cabo Branco') {
+                        propertyData.location.coordinates.lat = -7.1354;
+                        propertyData.location.coordinates.lng = -34.8210;
+                    }
+                    else if (neighborhood === 'Tambau') {
+                        propertyData.location.coordinates.lat = -7.1165;
+                        propertyData.location.coordinates.lng = -34.8228;
+                    }
+                    else if (neighborhood === 'Bessa') {
+                        propertyData.location.coordinates.lat = -7.0658;
+                        propertyData.location.coordinates.lng = -34.8322;
+                    }
+                }
+            }
+            else {
+                propertyData.location.coordinates = { lat: null, lng: null };
+                const neighborhood = propertyData.location.neighborhood;
+                if (neighborhood === 'Cabo Branco') {
+                    propertyData.location.coordinates.lat = -7.1354;
+                    propertyData.location.coordinates.lng = -34.8210;
+                }
+                else if (neighborhood === 'Tambau') {
+                    propertyData.location.coordinates.lat = -7.1165;
+                    propertyData.location.coordinates.lng = -34.8228;
+                }
+                else if (neighborhood === 'Bessa') {
+                    propertyData.location.coordinates.lat = -7.0658;
+                    propertyData.location.coordinates.lng = -34.8322;
+                }
+            }
+        }
         const docRef = db.collection("properties").doc(propertyId);
         const docSnap = await docRef.get();
         if (docSnap.exists) {
@@ -314,13 +350,15 @@ exports.addDiscoveredUrls = (0, https_1.onRequest)(async (request, response) => 
         snapshot.forEach((doc) => {
             const data = doc.data();
             if (data.url) {
-                existingUrls.add(data.url);
+                existingUrls.add(data.url.trim().replace(/\/$/, ""));
             }
         });
         let addedCount = 0;
+        const normalizeUrl = (url) => url.trim().replace(/\/$/, "");
         // Add missing URLs
         const batch = db.batch();
-        for (const url of newUrls) {
+        for (const rawUrl of newUrls) {
+            const url = normalizeUrl(rawUrl);
             if (!existingUrls.has(url)) {
                 const newDocRef = targetUrlsRef.doc();
                 batch.set(newDocRef, { url });
@@ -362,7 +400,7 @@ exports.getTargetUrls = (0, https_1.onRequest)(async (request, response) => {
         snapshot.forEach((doc) => {
             const data = doc.data();
             if (data.url) {
-                urls.push(data.url);
+                urls.push(data.url.trim().replace(/\/$/, ""));
             }
         });
         response.status(200).json(urls);
