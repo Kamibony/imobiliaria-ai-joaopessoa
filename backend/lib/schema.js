@@ -20,7 +20,7 @@ exports.PropertySchema = zod_1.z.object({
     location: zod_1.z.object({
         neighborhood: zod_1.z.enum(['Cabo Branco', 'Tambau', 'Bessa', 'Tambaú']), // Allow Tambaú for fuzzy match
         position_to_sea: zod_1.z.enum(['beira_mar', 'quadra_mar', 'miolo']),
-        distance_to_beach_meters: zod_1.z.number(),
+        distance_to_beach_meters: zod_1.z.number().nullable(),
         coordinates: zod_1.z.object({
             lat: zod_1.z.number().nullable(),
             lng: zod_1.z.number().nullable(),
@@ -37,7 +37,7 @@ exports.PropertySchema = zod_1.z.object({
             'pt-BR': zod_1.z.array(zod_1.z.string()),
             'en': zod_1.z.array(zod_1.z.string()),
         }),
-        investment_roi_estimated_percent: zod_1.z.number(),
+        investment_roi_estimated_percent: zod_1.z.number().nullable(),
         local_advantage: zod_1.z.object({
             'pt-BR': zod_1.z.string(),
             'en': zod_1.z.string(),

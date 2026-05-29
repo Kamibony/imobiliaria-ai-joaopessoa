@@ -21,7 +21,7 @@ const PropertyCard = ({ property, latestSnapshot }) => {
       <p><strong>Bairro:</strong> {property.location?.neighborhood || 'N/A'}</p>
       {latestSnapshot ? (
         <>
-          <p><strong>Preço:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl || 0)}</p>
+          <p><strong>Preço:</strong> {!latestSnapshot.price_brl ? 'Sob Consulta' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl)}</p>
           <p><strong>Status:</strong> {latestSnapshot.status || 'N/A'}</p>
         </>
       ) : (
@@ -495,7 +495,7 @@ function App() {
                       <strong>{property.basic_info?.title || 'Sem Título'}</strong><br />
                       {latestSnapshot ? (
                         <>
-                          Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl || 0)}<br />
+                          Preço: {!latestSnapshot.price_brl ? 'Sob Consulta' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl)}<br />
                           Status: {latestSnapshot.status || 'N/A'}<br />
                         </>
                       ) : <>Sem preço<br /></> }
@@ -524,7 +524,7 @@ function App() {
 
                 const latestSnapshot = getLatestSnapshot(property);
 
-                if (latestSnapshot && latestSnapshot.price_per_m2_brl && stats[neighborhood]) {
+                if (latestSnapshot && latestSnapshot.price_per_m2_brl && latestSnapshot.price_per_m2_brl > 0 && stats[neighborhood]) {
                   stats[neighborhood].sum += latestSnapshot.price_per_m2_brl;
                   stats[neighborhood].count += 1;
                 }

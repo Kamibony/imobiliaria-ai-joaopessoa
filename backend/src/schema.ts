@@ -19,7 +19,7 @@ export const PropertySchema = z.object({
   location: z.object({
     neighborhood: z.enum(['Cabo Branco', 'Tambau', 'Bessa', 'Tambaú']), // Allow Tambaú for fuzzy match
     position_to_sea: z.enum(['beira_mar', 'quadra_mar', 'miolo']),
-    distance_to_beach_meters: z.number(),
+    distance_to_beach_meters: z.number().nullable(),
     coordinates: z.object({
       lat: z.number().nullable(),
       lng: z.number().nullable(),
@@ -36,7 +36,7 @@ export const PropertySchema = z.object({
       'pt-BR': z.array(z.string()),
       'en': z.array(z.string()),
     }),
-    investment_roi_estimated_percent: z.number(),
+    investment_roi_estimated_percent: z.number().nullable(),
     local_advantage: z.object({
       'pt-BR': z.string(),
       'en': z.string(),
