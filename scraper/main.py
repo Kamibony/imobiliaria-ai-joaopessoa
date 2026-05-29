@@ -1,5 +1,6 @@
 import os
 import requests
+import base64
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -24,24 +25,32 @@ def scrape_and_send(url, page):
         # Navigate to URL and wait for JS to render
         page.goto(url, wait_until="networkidle", timeout=30000)
 
-        # Strip unwanted elements before text extraction to prevent passing too much noise to AI
+        # Semantic DOM Reduction: Strip unwanted elements before text extraction
         page.evaluate('''() => {
-            const elementsToRemove = document.querySelectorAll('header, footer, nav, script, style, noscript, iframe');
+            const elementsToRemove = document.querySelectorAll('header, footer, nav, aside, script, style, noscript, iframe');
             elementsToRemove.forEach(el => el.remove());
         }''')
 
-        # Extract text using Playwright, prioritizing <main> tag
+        # Extract text using Playwright, prioritizing semantically dense tags
         if page.locator('main').count() > 0:
             raw_text = page.locator('main').inner_text()
+        elif page.locator('article').count() > 0:
+             raw_text = page.locator('article').inner_text()
         else:
             raw_text = page.locator('body').inner_text()
 
-        # Construct JSON payload
         payload = {
             "source": "python_playwright_scraper",
             "url": url,
             "raw_text": raw_text
         }
+
+        # Multimodal Fallback: if text is too short, capture a screenshot
+        if len(raw_text) < 500:
+            print(f"Extracted text too short ({len(raw_text)} chars) for {url}. Capturing screenshot for multimodal fallback.")
+            screenshot_bytes = page.screenshot(full_page=True)
+            encoded_image = base64.b64encode(screenshot_bytes).decode('utf-8')
+            payload["image_base64"] = encoded_image
 
         # Prepare headers for Webhook
         webhook_headers = {

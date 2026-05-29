@@ -8,6 +8,7 @@ export interface PropertySnapshot {
 
 export interface Property {
   id: string; // unique identifier
+  needs_geocoding?: boolean;
   basic_info: {
     title: string;
     developer: string | null;
@@ -29,8 +30,14 @@ export interface Property {
   };
   snapshots: PropertySnapshot[];
   ai_context: {
-    target_persona: string[];
+    target_persona: {
+      'pt-BR': string[];
+      'en': string[];
+    };
     investment_roi_estimated_percent: number;
-    local_advantage: string; // System prompt context for Gemini
+    local_advantage: {
+      'pt-BR': string;
+      'en': string;
+    };
   };
 }
