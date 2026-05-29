@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.whatsappWebhook = exports.getTargetUrls = exports.addDiscoveredUrls = exports.filterDiscoveredUrls = exports.ingestPropertyData = exports.processPropertyData = void 0;
+exports.whatsappWebhook = exports.getTargetUrls = exports.addDiscoveredUrls = exports.dispatchScrapingMission = exports.filterDiscoveredUrls = exports.ingestPropertyData = exports.processPropertyData = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const tasks_1 = require("firebase-functions/v2/tasks");
 const admin = __importStar(require("firebase-admin"));
@@ -239,7 +239,7 @@ exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) =>
     }
     const token = authHeader.split("Bearer ")[1];
     const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
+    if (!expectedSecret || token !== expectedSecret) {
         response.status(401).send("Unauthorized");
         return;
     }
@@ -359,6 +359,46 @@ exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120 }, a
     }
     catch (error) {
         console.error("Error filtering URLs:", error);
+        response.status(500).send("Internal Server Error");
+    }
+});
+exports.dispatchScrapingMission = (0, https_1.onRequest)(async (request, response) => {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    const token = authHeader.split("Bearer ")[1];
+    const expectedSecret = process.env.WEBHOOK_SECRET;
+    if (!token || (expectedSecret && token !== expectedSecret)) {
+        response.status(401).send("Unauthorized");
+        return;
+    }
+    try {
+        const payload = request.body;
+        if (!payload || typeof payload.url !== "string" || !payload.url) {
+            response.status(400).send("Invalid payload format. Expected an object with a 'url' string.");
+            return;
+        }
+        const taskSessionsRef = db.collection("task_sessions");
+        const blockId = `block_${Date.now()}`;
+        const missionDoc = {
+            status: "executing_block",
+            current_block: {
+                block_id: blockId,
+                instruction: "Scrape this real estate website and extract property details",
+                url: payload.url
+            }
+        };
+        const newDocRef = await taskSessionsRef.add(missionDoc);
+        response.status(200).json({
+            message: "Scraping mission dispatched successfully.",
+            mission_id: newDocRef.id,
+            block_id: blockId
+        });
+    }
+    catch (error) {
+        console.error("Error dispatching scraping mission:", error);
         response.status(500).send("Internal Server Error");
     }
 });
