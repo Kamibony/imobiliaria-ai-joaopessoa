@@ -84,7 +84,7 @@ export const processPropertyData = onTaskDispatched({
 
       Guidelines:
       1. ONLY return the raw JSON object. Do not include markdown formatting like \`\`\`json.
-      2. Set missing fields strictly to null (or 0 for numbers if appropriate).
+      2. Set missing fields strictly to null (including for all numeric fields like prices, area, bedrooms, distance to beach). Do not use 0 for missing data.
       3. For target_persona and local_advantage, provide localized strings in both pt-BR and en.
       4. "source" in snapshot should be "${source}".
 
