@@ -371,29 +371,30 @@ export const dispatchScrapingMission = onRequest(async (request, response) => {
   try {
     const payload = request.body;
 
-    if (!payload || typeof payload.url !== "string" || !payload.url) {
-      response.status(400).send("Invalid payload format. Expected an object with a 'url' string.");
+    if (!payload || typeof payload.url !== "string" || !payload.url || typeof payload.instruction !== "string" || !payload.instruction) {
+      response.status(400).send("Invalid payload format. Expected an object with 'url' and 'instruction' strings.");
       return;
     }
 
     const taskSessionsRef = db.collection("task_sessions");
-    const blockId = `block_${Date.now()}`;
+    const newDocRef = taskSessionsRef.doc();
 
     const missionDoc = {
-      status: "executing_block",
-      current_block: {
-        block_id: blockId,
-        instruction: "Scrape this real estate website and extract property details",
-        url: payload.url
-      }
+      doc_id: newDocRef.id,
+      status: "PENDING",
+      intent: "WEB",
+      supervisor_plan: [
+        `[WEB] Navigate to URL: ${payload.url}`,
+        `[WEB] ${payload.instruction}`
+      ],
+      created_at: admin.firestore.FieldValue.serverTimestamp()
     };
 
-    const newDocRef = await taskSessionsRef.add(missionDoc);
+    await newDocRef.set(missionDoc);
 
     response.status(200).json({
       message: "Scraping mission dispatched successfully.",
-      mission_id: newDocRef.id,
-      block_id: blockId
+      block_id: newDocRef.id
     });
   } catch (error) {
     console.error("Error dispatching scraping mission:", error);
