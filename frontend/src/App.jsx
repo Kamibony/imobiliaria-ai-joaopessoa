@@ -1,3 +1,5 @@
+import ErrorBoundary from './ErrorBoundary';
+import { LanguageProvider, useLanguage } from './LanguageContext';
 import { useState, useEffect, useMemo } from 'react'
 import { collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
@@ -68,6 +70,16 @@ const PropertyCard = ({ property, latestSnapshot }) => {
         </div>
       )}
     </div>
+  );
+};
+
+
+const LanguageToggle = () => {
+  const { language, toggleLanguage } = useLanguage();
+  return (
+    <button onClick={toggleLanguage} style={{ padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', background: '#e0e0e0', border: '1px solid #ccc' }}>
+      🌐 {language === 'pt-BR' ? 'Português (BR)' : 'English'}
+    </button>
   );
 };
 
@@ -325,7 +337,10 @@ function App() {
     <div className="admin-container">
       <h1>Imobiliária AI - Painel Administrativo</h1>
       <p className="subtitle">Ingestão de Dados e Time Machine</p>
-      <button onClick={handleLogout} className="logout-btn" style={{ marginBottom: '1rem' }}>Sair</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <button onClick={handleLogout} className="logout-btn">Sair</button>
+        <LanguageToggle />
+      </div>
 
       <div className="tabs">
         <button

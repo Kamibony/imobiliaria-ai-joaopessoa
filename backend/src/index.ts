@@ -1,49 +1,42 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { onTaskDispatched } from "firebase-functions/v2/tasks";
 import * as admin from "firebase-admin";
+import { getFunctions } from "firebase-admin/functions";
 import { VertexAI } from "@google-cloud/vertexai";
+import { PropertySchema } from "./schema";
+import { fuzzyMatchNeighborhood } from "./utils";
 
-// Initialize Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
 
 // Initialize Vertex AI
-const project = process.env.GCLOUD_PROJECT || "imobiliaria-ai-joaopessoa";
-const location = "us-central1"; // Assuming us-central1 for Vertex AI
-const vertexAi = new VertexAI({ project, location });
-const generativeModel = vertexAi.getGenerativeModel({
-  model: "gemini-2.5-flash",
-});
+let project = 'imobiliaria-ai-joaopessoa';
+if (process.env.GCLOUD_PROJECT) {
+  project = process.env.GCLOUD_PROJECT;
+} else if (process.env.FIREBASE_CONFIG) {
+  try {
+    project = JSON.parse(process.env.FIREBASE_CONFIG as string).projectId;
+  } catch (e) {
+    console.error('Error parsing FIREBASE_CONFIG', e);
+  }
+}
+const location = 'us-central1';
+const vertexAi = new VertexAI({ project: project, location: location });
 
-// Empty HTTP Cloud Function serving as webhook for incoming market data
-export const ingestPropertyData = onRequest(async (request, response) => {
-  // Require Bearer token in authorization header
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
+
+// Queue worker function (process the data asynchronously)
+export const processPropertyData = onTaskDispatched({
+  timeoutSeconds: 180,
+  retryConfig: {
+    maxAttempts: 3,
+    minBackoffSeconds: 60,
   }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
+}, async (req) => {
+  const { dataToParse, source, image_base64 } = req.data;
 
   try {
-    const payload = request.body;
-    let dataToParse = "";
-
-    if (typeof payload === "string") {
-      dataToParse = payload;
-    } else if (typeof payload === "object") {
-      dataToParse = JSON.stringify(payload);
-    } else {
-      response.status(400).send("Invalid payload format. Expected string or JSON.");
-      return;
-    }
-
     const prompt = `
-      You are an expert real estate data extractor for the Cabo Branco and Tambaú market in João Pessoa.
+      You are an expert real estate data extractor for the Cabo Branco, Tambaú, and Bessa market in João Pessoa.
       Extract the provided data and return a strict JSON object that perfectly matches the following TypeScript interface:
 
       export interface PropertySnapshot {
@@ -51,7 +44,7 @@ export const ingestPropertyData = onRequest(async (request, response) => {
         price_brl: number | null;
         price_per_m2_brl: number | null;
         status: 'na_planta' | 'em_construcao' | 'pronto';
-        source: string; // E.g., 'admin_upload', 'scraper'
+        source: string;
       }
 
       export interface Property {
@@ -75,25 +68,43 @@ export const ingestPropertyData = onRequest(async (request, response) => {
           sun_orientation: 'nascente' | 'nascente_sul' | 'sul' | 'poente';
           bedrooms: number | null;
         };
-        snapshots: PropertySnapshot[]; // Must contain exactly one snapshot with the extracted status and financials
+        snapshots: PropertySnapshot[];
         ai_context: {
-          target_persona: string[]; // MUST be generated exclusively in Brazilian Portuguese (pt-BR)
+          target_persona: {
+            'pt-BR': string[];
+            'en': string[];
+          };
           investment_roi_estimated_percent: number;
-          local_advantage: string; // System prompt context for Gemini. MUST be generated exclusively in Brazilian Portuguese (pt-BR)
+          local_advantage: {
+            'pt-BR': string;
+            'en': string;
+          };
         };
       }
 
-      Return ONLY the valid JSON object, without any markdown formatting, code blocks, or explanations.
-      Ensure the output is parseable by JSON.parse().
-      IMPORTANT: The fields ai_context.target_persona and ai_context.local_advantage MUST be generated exclusively in Brazilian Portuguese (pt-BR).
-      Strict Instruction: If any specific data point (like price, area, date, or developer) is completely missing from the text, DO NOT apologize, explain, or add conversational text. Simply assign null (or 0 for numbers) to that specific field and return the valid JSON.
+      Guidelines:
+      1. ONLY return the raw JSON object. Do not include markdown formatting like \`\`\`json.
+      2. Set missing fields strictly to null (or 0 for numbers if appropriate).
+      3. For target_persona and local_advantage, provide localized strings in both pt-BR and en.
+      4. "source" in snapshot should be "${source}".
 
       Data to extract:
       ${dataToParse}
     `;
 
-        const result = await generativeModel.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    const generativeModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+    let parts: any[] = [{ text: prompt }];
+    if (image_base64) {
+      parts.push({
+        inlineData: {
+          data: image_base64,
+          mimeType: "image/png"
+        }
+      });
+    }
+
+    const result = await generativeModel.generateContent({
+      contents: [{ role: 'user', parts: parts }],
       generationConfig: {
         responseMimeType: "application/json",
       },
@@ -102,35 +113,37 @@ export const ingestPropertyData = onRequest(async (request, response) => {
     const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!responseText) {
-      console.error("No response text from Gemini");
-      response.status(500).send("Failed to parse data");
-      return;
+      console.error("No response text from Gemini.");
+      throw new Error("Failed to extract data");
     }
 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error("No JSON object found in response:", responseText);
-      response.status(500).send("Internal Server Error: No JSON found");
-      return;
+      console.error("No JSON block found in response:", responseText);
+      throw new Error("No JSON block found");
     }
+
     const sanitizedText = jsonMatch[0];
+    let parsedData: any;
 
-    // Parse the JSON string into an object
-    let propertyData: any;
     try {
-      propertyData = JSON.parse(sanitizedText);
+      parsedData = JSON.parse(sanitizedText);
     } catch (parseError) {
-      console.error("Failed to parse Gemini response as JSON.");
-      console.error("Raw responseText:", responseText);
-      console.error("Sanitized text:", sanitizedText);
-      console.error("Parse error:", parseError);
-      response.status(500).send("Internal Server Error: Failed to parse generated data");
-      return;
+      console.error("Failed to parse Gemini response as JSON.", sanitizedText);
+      throw new Error("Invalid JSON");
     }
 
-    // The interface delivery_date and timestamp are Dates, but Gemini will return a string.
-    // Convert them to Date objects.
-    if (propertyData.basic_info && propertyData.basic_info.delivery_date) {
+    // Validate using Zod schema
+    const validationResult = PropertySchema.safeParse(parsedData);
+    if (!validationResult.success) {
+      console.error("Schema validation failed:", validationResult.error);
+      throw new Error("Schema validation failed");
+    }
+
+    let propertyData = validationResult.data as any;
+
+    // Convert string dates to Date objects
+    if (propertyData.basic_info?.delivery_date) {
       propertyData.basic_info.delivery_date = new Date(propertyData.basic_info.delivery_date);
     }
 
@@ -139,81 +152,119 @@ export const ingestPropertyData = onRequest(async (request, response) => {
         if (snap.timestamp) {
           snap.timestamp = new Date(snap.timestamp);
         } else {
-          snap.timestamp = new Date(); // Fallback to current time
+          snap.timestamp = new Date();
         }
         if (!snap.source) {
-          snap.source = 'admin_upload'; // Default source
+          snap.source = source || 'admin_upload';
         }
       });
     }
 
-
-    // Determine property ID
     const propertyId = propertyData.id || db.collection("properties").doc().id;
     propertyData.id = propertyId;
 
     // Coordinate Fallback Logic
+    propertyData.needs_geocoding = false;
     if (propertyData.location) {
-      if (propertyData.location.coordinates) {
-        if (propertyData.location.coordinates.lat == null || propertyData.location.coordinates.lng == null) {
-           const neighborhood = propertyData.location.neighborhood;
-           if (neighborhood === 'Cabo Branco') {
-             propertyData.location.coordinates.lat = -7.1354;
-             propertyData.location.coordinates.lng = -34.8210;
-           } else if (neighborhood === 'Tambau') {
-             propertyData.location.coordinates.lat = -7.1165;
-             propertyData.location.coordinates.lng = -34.8228;
-           } else if (neighborhood === 'Bessa') {
-             propertyData.location.coordinates.lat = -7.0658;
-             propertyData.location.coordinates.lng = -34.8322;
-           }
-        }
-      } else {
+      if (propertyData.location.coordinates?.lat == null || propertyData.location.coordinates?.lng == null) {
+        propertyData.needs_geocoding = true;
+        const fuzzyNeighborhood = fuzzyMatchNeighborhood(propertyData.location.neighborhood);
+
+        // Ensure coordinates object exists
         propertyData.location.coordinates = { lat: null, lng: null };
-        const neighborhood = propertyData.location.neighborhood;
-        if (neighborhood === 'Cabo Branco') {
-             propertyData.location.coordinates.lat = -7.1354;
-             propertyData.location.coordinates.lng = -34.8210;
-        } else if (neighborhood === 'Tambau') {
-             propertyData.location.coordinates.lat = -7.1165;
-             propertyData.location.coordinates.lng = -34.8228;
-        } else if (neighborhood === 'Bessa') {
-             propertyData.location.coordinates.lat = -7.0658;
-             propertyData.location.coordinates.lng = -34.8322;
+
+        if (fuzzyNeighborhood === 'Cabo Branco') {
+          propertyData.location.coordinates.lat = -7.1354;
+          propertyData.location.coordinates.lng = -34.8210;
+        } else if (fuzzyNeighborhood === 'Tambau') {
+          propertyData.location.coordinates.lat = -7.1165;
+          propertyData.location.coordinates.lng = -34.8228;
+        } else if (fuzzyNeighborhood === 'Bessa') {
+          propertyData.location.coordinates.lat = -7.0658;
+          propertyData.location.coordinates.lng = -34.8322;
+        } else {
+           // Default fallback
+           propertyData.location.coordinates.lat = -7.1150;
+           propertyData.location.coordinates.lng = -34.8630;
         }
       }
     }
-
 
     const docRef = db.collection("properties").doc(propertyId);
     const docSnap = await docRef.get();
 
     if (docSnap.exists) {
-      // Append the new snapshot to existing ones
       const newSnapshots = propertyData.snapshots || [];
       await docRef.update({
         snapshots: admin.firestore.FieldValue.arrayUnion(...newSnapshots)
       });
-      // Update other fields as well (using merge)
-      // Exclude snapshots from set to avoid overwriting all existing snapshots
       const { snapshots, ...otherData } = propertyData;
       await docRef.set(otherData, { merge: true });
     } else {
-      // Create new document
       await docRef.set(propertyData);
     }
-
-    response.status(200).send({
-      message: "Data successfully ingested and saved to Firestore",
-      propertyId: propertyId,
-    });
   } catch (error) {
-    console.error("Error ingesting property data:", error);
+    console.error("Error processing property data task:", error);
+    throw error; // Will retry via Cloud Tasks
+  }
+});
+
+
+export const ingestPropertyData = onRequest(async (request, response) => {
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  const expectedSecret = process.env.WEBHOOK_SECRET;
+  if (!token || (expectedSecret && token !== expectedSecret)) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const payload = request.body;
+    let dataToParse = "";
+    let source = "admin_upload";
+
+    if (typeof payload === "string") {
+      dataToParse = payload;
+    } else if (typeof payload === "object") {
+      if (payload.raw_text) {
+        dataToParse = payload.raw_text;
+      } else {
+        dataToParse = JSON.stringify(payload);
+      }
+      if (payload.source) {
+        source = payload.source;
+      }
+    } else {
+      response.status(400).send("Invalid payload format. Expected string or JSON.");
+      return;
+    }
+
+
+
+    const queue = getFunctions().taskQueue('processPropertyData');
+
+    try {
+      await queue.enqueue({
+        dataToParse,
+        source,
+        image_base64: payload.image_base64
+      });
+    } catch (e) {
+      console.error("Failed to enqueue task", e);
+      throw e;
+    }response.status(202).send({ message: "Data received and queued for processing." });
+
+  } catch (error) {
+    console.error("Error queueing property data:", error);
     response.status(500).send("Internal Server Error");
   }
 });
 
-// HTTP Cloud Function to add newly discovered target URLs
 
 // HTTP Cloud Function to filter discovered URLs using Gemini
 export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, async (request, response) => {
@@ -408,5 +459,93 @@ export const getTargetUrls = onRequest(async (request, response) => {
   } catch (error) {
     console.error("Error fetching target URLs:", error);
     response.status(500).send("Internal Server Error");
+  }
+});
+
+
+// WhatsApp Webhook
+export const whatsappWebhook = onRequest(async (request, response) => {
+  if (request.method === 'GET') {
+    // WhatsApp Verification
+    const mode = request.query['hub.mode'];
+    const token = request.query['hub.verify_token'];
+    const challenge = request.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+      response.status(200).send(challenge);
+    } else {
+      response.sendStatus(403);
+    }
+    return;
+  }
+
+  if (request.method === 'POST') {
+    try {
+      const body = request.body;
+      if (body.object) {
+        if (body.entry && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
+          const message = body.entry[0].changes[0].value.messages[0];
+          const from = message.from; // Sender's phone number
+          const text = message.text?.body;
+
+          if (text) {
+            // Intent Router
+            const intentPrompt = `
+              Analyze the following WhatsApp message from a real estate context.
+              Determine the user's intent. Return ONLY "INGESTION" if the message contains property details to be added to the catalog (e.g., price, area, description, "I have a property").
+              Return ONLY "INQUIRY" if the user is asking a question about properties, prices, or recommendations (e.g., "What do you have in Bessa?", "Looking for a 2 bedroom").
+              If unsure, return "INQUIRY".
+
+              Message: "${text}"
+            `;
+
+            const routerModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const routerResult = await routerModel.generateContent({
+              contents: [{ role: 'user', parts: [{ text: intentPrompt }] }],
+            });
+            const intent = routerResult.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toUpperCase();
+
+            if (intent === 'INGESTION') {
+              // Queue for ingestion
+              const queue = getFunctions().taskQueue('processPropertyData');
+              try {
+                  await queue.enqueue({
+                    dataToParse: text,
+                    source: 'whatsapp_broker'
+                  });
+                  console.log(`Queued WhatsApp ingestion for ${from}`);
+              } catch(e) {
+                  console.error("Failed to queue WhatsApp ingestion", e);
+              }
+
+              // Send summary/confirmation via WhatsApp API (mocked here, would use actual WhatsApp API)
+              console.log(`Sending WhatsApp reply to ${from}: "Entendi! Estou processando as informações deste imóvel e adicionando ao catálogo."`);
+            } else {
+              // Inquiry handling (RAG simulation)
+              const ragPrompt = `
+                You are a helpful Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa).
+                Answer the user's question concisely in Brazilian Portuguese. Highlight ROI and local advantages if relevant.
+
+                User question: "${text}"
+              `;
+              const ragModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+              const ragResult = await ragModel.generateContent({
+                contents: [{ role: 'user', parts: [{ text: ragPrompt }] }],
+              });
+              const replyText = ragResult.response.candidates?.[0]?.content?.parts?.[0]?.text;
+
+              // Send reply via WhatsApp API (mocked)
+              console.log(`Sending WhatsApp reply to ${from}: "${replyText}"`);
+            }
+          }
+        }
+        response.sendStatus(200);
+      } else {
+        response.sendStatus(404);
+      }
+    } catch (error) {
+      console.error("Error processing WhatsApp webhook:", error);
+      response.sendStatus(500);
+    }
   }
 });
