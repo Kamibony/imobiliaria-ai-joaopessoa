@@ -41,7 +41,9 @@ const functions_1 = require("firebase-admin/functions");
 const vertexai_1 = require("@google-cloud/vertexai");
 const schema_1 = require("./schema");
 const utils_1 = require("./utils");
+const cors = require("cors");
 admin.initializeApp();
+const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 // Initialize Vertex AI
 let project = 'imobiliaria-ai-joaopessoa';
@@ -241,88 +243,91 @@ exports.processPropertyData = (0, tasks_1.onTaskDispatched)({
         throw error; // Will retry via Cloud Tasks
     }
 });
-exports.ingestPropertyData = (0, https_1.onRequest)(async (request, response) => {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!expectedSecret || token !== expectedSecret) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const payload = request.body;
-        let dataToParse = "";
-        let source = "admin_upload";
-        if (typeof payload === "string") {
-            dataToParse = payload;
+exports.ingestPropertyData = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
+            return;
         }
-        else if (typeof payload === "object") {
-            if (payload.raw_text) {
-                dataToParse = payload.raw_text;
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!expectedSecret || token !== expectedSecret) {
+            response.status(401).send("Unauthorized");
+            return;
+        }
+        try {
+            const payload = request.body;
+            let dataToParse = "";
+            let source = "admin_upload";
+            if (typeof payload === "string") {
+                dataToParse = payload;
+            }
+            else if (typeof payload === "object") {
+                if (payload.raw_text) {
+                    dataToParse = payload.raw_text;
+                }
+                else {
+                    dataToParse = JSON.stringify(payload);
+                }
+                if (payload.source) {
+                    source = payload.source;
+                }
             }
             else {
-                dataToParse = JSON.stringify(payload);
+                response.status(400).send("Invalid payload format. Expected string or JSON.");
+                return;
             }
-            if (payload.source) {
-                source = payload.source;
+            const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
+            try {
+                await queue.enqueue({
+                    dataToParse,
+                    source,
+                    url: payload.url,
+                    new_hash: payload.new_hash,
+                    image_base64: payload.image_base64
+                });
             }
+            catch (e) {
+                console.error("Failed to enqueue task", e);
+                throw e;
+            }
+            response.status(202).send({ message: "Data received and queued for processing." });
         }
-        else {
-            response.status(400).send("Invalid payload format. Expected string or JSON.");
-            return;
+        catch (error) {
+            console.error("Error queueing property data:", error);
+            response.status(500).send("Internal Server Error");
         }
-        const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
-        try {
-            await queue.enqueue({
-                dataToParse,
-                source,
-                url: payload.url,
-                new_hash: payload.new_hash,
-                image_base64: payload.image_base64
-            });
-        }
-        catch (e) {
-            console.error("Failed to enqueue task", e);
-            throw e;
-        }
-        response.status(202).send({ message: "Data received and queued for processing." });
-    }
-    catch (error) {
-        console.error("Error queueing property data:", error);
-        response.status(500).send("Internal Server Error");
-    }
+    });
 });
 // HTTP Cloud Function to filter discovered URLs using Gemini
-exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120 }, async (request, response) => {
-    // Require Bearer token in authorization header
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const payload = request.body;
-        // Ensure payload is an array of objects
-        if (!Array.isArray(payload)) {
-            response.status(400).send("Invalid payload format. Expected an array of link objects.");
+exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120 }, (request, response) => {
+    corsHandler(request, response, async () => {
+        // Require Bearer token in authorization header
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const linksToFilter = payload.filter((link) => typeof link === "object" && link !== null && link.href);
-        if (linksToFilter.length === 0) {
-            response.status(400).send("No valid links provided in the array.");
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!token || (expectedSecret && token !== expectedSecret)) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const prompt = `
+        try {
+            const payload = request.body;
+            // Ensure payload is an array of objects
+            if (!Array.isArray(payload)) {
+                response.status(400).send("Invalid payload format. Expected an array of link objects.");
+                return;
+            }
+            const linksToFilter = payload.filter((link) => typeof link === "object" && link !== null && link.href);
+            if (linksToFilter.length === 0) {
+                response.status(400).send("No valid links provided in the array.");
+                return;
+            }
+            const prompt = `
       You are an expert real estate data assistant focused on the João Pessoa market, specifically the coastal neighborhoods of Cabo Branco, Tambaú, and Bessa.
       I will provide you a JSON list of links extracted from developer websites.
       Your task is to filter this list and return ONLY the URLs that likely point to individual property/project detail pages in our target geographic area.
@@ -334,406 +339,420 @@ exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120 }, a
       Links to evaluate:
       ${JSON.stringify(linksToFilter, null, 2)}
     `;
-        const filterModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const result = await filterModel.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
-                responseMimeType: "application/json",
-            },
-        });
-        const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!responseText) {
-            console.error("No response text from Gemini in filterDiscoveredUrls");
-            response.status(500).send("Failed to filter URLs");
+            const filterModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const result = await filterModel.generateContent({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                },
+            });
+            const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!responseText) {
+                console.error("No response text from Gemini in filterDiscoveredUrls");
+                response.status(500).send("Failed to filter URLs");
+                return;
+            }
+            const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+                console.error("No JSON array found in response:", responseText);
+                response.status(500).send("Internal Server Error: No JSON array found");
+                return;
+            }
+            const sanitizedText = jsonMatch[0];
+            // Parse the JSON string into an object
+            let filteredUrls = [];
+            try {
+                filteredUrls = JSON.parse(sanitizedText);
+            }
+            catch (parseError) {
+                console.error("Failed to parse Gemini response as JSON in filterDiscoveredUrls.");
+                console.error("Raw responseText:", responseText);
+                console.error("Sanitized text:", sanitizedText);
+                console.error("Parse error:", parseError);
+                response.status(500).send("Internal Server Error: Failed to parse filtered URLs");
+                return;
+            }
+            response.status(200).json(filteredUrls);
+        }
+        catch (error) {
+            console.error("Error filtering URLs:", error);
+            response.status(500).send("Internal Server Error");
+        }
+    });
+});
+exports.dispatchScrapingMission = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) {
-            console.error("No JSON array found in response:", responseText);
-            response.status(500).send("Internal Server Error: No JSON array found");
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!token || (expectedSecret && token !== expectedSecret)) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const sanitizedText = jsonMatch[0];
-        // Parse the JSON string into an object
-        let filteredUrls = [];
         try {
-            filteredUrls = JSON.parse(sanitizedText);
+            const payload = request.body;
+            if (!payload || typeof payload.url !== "string" || !payload.url || typeof payload.instruction !== "string" || !payload.instruction) {
+                response.status(400).send("Invalid payload format. Expected an object with 'url' and 'instruction' strings.");
+                return;
+            }
+            const taskSessionsRef = db.collection("task_sessions");
+            const newDocRef = taskSessionsRef.doc();
+            const missionDoc = {
+                doc_id: newDocRef.id,
+                status: "PENDING",
+                intent: "WEB",
+                supervisor_plan: [
+                    `[WEB] Navigate to URL: ${payload.url}`,
+                    `[WEB] ${payload.instruction}`
+                ],
+                created_at: admin.firestore.FieldValue.serverTimestamp()
+            };
+            await newDocRef.set(missionDoc);
+            response.status(200).json({
+                message: "Scraping mission dispatched successfully.",
+                block_id: newDocRef.id
+            });
         }
-        catch (parseError) {
-            console.error("Failed to parse Gemini response as JSON in filterDiscoveredUrls.");
-            console.error("Raw responseText:", responseText);
-            console.error("Sanitized text:", sanitizedText);
-            console.error("Parse error:", parseError);
-            response.status(500).send("Internal Server Error: Failed to parse filtered URLs");
-            return;
+        catch (error) {
+            console.error("Error dispatching scraping mission:", error);
+            response.status(500).send("Internal Server Error");
         }
-        response.status(200).json(filteredUrls);
-    }
-    catch (error) {
-        console.error("Error filtering URLs:", error);
-        response.status(500).send("Internal Server Error");
-    }
+    });
 });
-exports.dispatchScrapingMission = (0, https_1.onRequest)(async (request, response) => {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const payload = request.body;
-        if (!payload || typeof payload.url !== "string" || !payload.url || typeof payload.instruction !== "string" || !payload.instruction) {
-            response.status(400).send("Invalid payload format. Expected an object with 'url' and 'instruction' strings.");
+exports.addDiscoveredUrls = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        // Require Bearer token in authorization header
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const taskSessionsRef = db.collection("task_sessions");
-        const newDocRef = taskSessionsRef.doc();
-        const missionDoc = {
-            doc_id: newDocRef.id,
-            status: "PENDING",
-            intent: "WEB",
-            supervisor_plan: [
-                `[WEB] Navigate to URL: ${payload.url}`,
-                `[WEB] ${payload.instruction}`
-            ],
-            created_at: admin.firestore.FieldValue.serverTimestamp()
-        };
-        await newDocRef.set(missionDoc);
-        response.status(200).json({
-            message: "Scraping mission dispatched successfully.",
-            block_id: newDocRef.id
-        });
-    }
-    catch (error) {
-        console.error("Error dispatching scraping mission:", error);
-        response.status(500).send("Internal Server Error");
-    }
-});
-exports.addDiscoveredUrls = (0, https_1.onRequest)(async (request, response) => {
-    // Require Bearer token in authorization header
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const payload = request.body;
-        // Ensure payload is an array of strings
-        if (!Array.isArray(payload)) {
-            response.status(400).send("Invalid payload format. Expected an array of URLs.");
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!token || (expectedSecret && token !== expectedSecret)) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const newUrls = payload.filter((url) => typeof url === "string");
-        if (newUrls.length === 0) {
-            response.status(400).send("No valid URLs provided in the array.");
-            return;
-        }
-        const targetUrlsRef = db.collection("TargetURLs");
-        const reviewInboxRef = db.collection("ReviewInbox");
-        // Get existing URLs from TargetURLs to prevent pushing already known URLs to review
-        const targetSnapshot = await targetUrlsRef.get();
-        const existingUrls = new Set();
-        targetSnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.url) {
-                existingUrls.add(data.url.trim().replace(/\/$/, ""));
+        try {
+            const payload = request.body;
+            // Ensure payload is an array of strings
+            if (!Array.isArray(payload)) {
+                response.status(400).send("Invalid payload format. Expected an array of URLs.");
+                return;
             }
-        });
-        // Get URLs already in ReviewInbox to prevent duplicate queue entries
-        const inboxSnapshot = await reviewInboxRef.where("type", "==", "DISCOVERY").where("status", "==", "PENDING").get();
-        const inboxUrls = new Set();
-        inboxSnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.url) {
-                inboxUrls.add(data.url.trim().replace(/\/$/, ""));
+            const newUrls = payload.filter((url) => typeof url === "string");
+            if (newUrls.length === 0) {
+                response.status(400).send("No valid URLs provided in the array.");
+                return;
             }
-        });
-        let addedCount = 0;
-        const normalizeUrl = (url) => url.trim().replace(/\/$/, "");
-        const batch = db.batch();
-        for (const rawUrl of newUrls) {
-            const url = normalizeUrl(rawUrl);
-            if (!existingUrls.has(url) && !inboxUrls.has(url)) {
-                const newDocRef = reviewInboxRef.doc();
-                batch.set(newDocRef, {
-                    id: newDocRef.id,
-                    type: 'DISCOVERY',
-                    status: 'PENDING',
-                    url,
-                    created_at: admin.firestore.FieldValue.serverTimestamp()
-                });
-                inboxUrls.add(url);
-                addedCount++;
+            const targetUrlsRef = db.collection("TargetURLs");
+            const reviewInboxRef = db.collection("ReviewInbox");
+            // Get existing URLs from TargetURLs to prevent pushing already known URLs to review
+            const targetSnapshot = await targetUrlsRef.get();
+            const existingUrls = new Set();
+            targetSnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.url) {
+                    existingUrls.add(data.url.trim().replace(/\/$/, ""));
+                }
+            });
+            // Get URLs already in ReviewInbox to prevent duplicate queue entries
+            const inboxSnapshot = await reviewInboxRef.where("type", "==", "DISCOVERY").where("status", "==", "PENDING").get();
+            const inboxUrls = new Set();
+            inboxSnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.url) {
+                    inboxUrls.add(data.url.trim().replace(/\/$/, ""));
+                }
+            });
+            let addedCount = 0;
+            const normalizeUrl = (url) => url.trim().replace(/\/$/, "");
+            const batch = db.batch();
+            for (const rawUrl of newUrls) {
+                const url = normalizeUrl(rawUrl);
+                if (!existingUrls.has(url) && !inboxUrls.has(url)) {
+                    const newDocRef = reviewInboxRef.doc();
+                    batch.set(newDocRef, {
+                        id: newDocRef.id,
+                        type: 'DISCOVERY',
+                        status: 'PENDING',
+                        url,
+                        created_at: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                    inboxUrls.add(url);
+                    addedCount++;
+                }
             }
+            if (addedCount > 0) {
+                await batch.commit();
+            }
+            response.status(200).json({
+                message: `Successfully processed URLs. Added ${addedCount} new URLs to ReviewInbox.`,
+                addedCount
+            });
         }
-        if (addedCount > 0) {
-            await batch.commit();
+        catch (error) {
+            console.error("Error adding discovered URLs:", error);
+            response.status(500).send("Internal Server Error");
         }
-        response.status(200).json({
-            message: `Successfully processed URLs. Added ${addedCount} new URLs to ReviewInbox.`,
-            addedCount
-        });
-    }
-    catch (error) {
-        console.error("Error adding discovered URLs:", error);
-        response.status(500).send("Internal Server Error");
-    }
+    });
 });
 // HTTP Cloud Function to get dynamic target URLs for the scraper
-exports.getDiscoverySources = (0, https_1.onRequest)(async (request, response) => {
-    // Require Bearer token in authorization header
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const discoverySourcesRef = db.collection("DiscoverySources");
-        const snapshot = await discoverySourcesRef.get();
-        const sources = [];
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.source) {
-                sources.push({
-                    id: doc.id,
-                    source: data.source,
-                    type: data.type || 'URL',
-                });
-            }
-        });
-        response.status(200).json(sources);
-    }
-    catch (error) {
-        console.error("Error fetching discovery sources:", error);
-        response.status(500).send("Internal Server Error");
-    }
-});
-exports.processTriageAction = (0, https_1.onRequest)(async (request, response) => {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const payload = request.body;
-        if (!payload || !payload.id || !payload.action || !payload.type) {
-            response.status(400).send("Invalid payload format. Expected id, action (APPROVE/DISCARD), and type.");
+exports.getDiscoverySources = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        // Require Bearer token in authorization header
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const { id, action, type, url, new_hash, raw_text, image_base64 } = payload;
-        if (action !== 'APPROVE' && action !== 'DISCARD') {
-            response.status(400).send("Invalid action. Must be APPROVE or DISCARD.");
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!token || (expectedSecret && token !== expectedSecret)) {
+            response.status(401).send("Unauthorized");
             return;
         }
-        const reviewInboxRef = db.collection("ReviewInbox");
-        const docRef = reviewInboxRef.doc(id);
-        const docSnap = await docRef.get();
-        if (!docSnap.exists) {
-            response.status(404).send("Item not found in Review Inbox.");
-            return;
-        }
-        await docRef.update({ status: action === 'APPROVE' ? 'APPROVED' : 'DISCARDED' });
-        if (action === 'APPROVE') {
-            const targetUrlsRef = db.collection("TargetURLs");
-            if (type === 'DISCOVERY') {
-                // Check if already in TargetURLs
-                const targetQuery = await targetUrlsRef.where('url', '==', url).get();
-                if (targetQuery.empty) {
-                    await targetUrlsRef.add({
-                        url: url,
-                        last_content_hash: null,
+        try {
+            const discoverySourcesRef = db.collection("DiscoverySources");
+            const snapshot = await discoverySourcesRef.get();
+            const sources = [];
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.source) {
+                    sources.push({
+                        id: doc.id,
+                        source: data.source,
+                        type: data.type || 'URL',
                     });
                 }
-                // Dispatch scraping mission
-                const taskSessionsRef = db.collection("task_sessions");
-                await taskSessionsRef.add({
-                    doc_id: taskSessionsRef.doc().id, // Let Firestore generate ID, but save it in field
-                    status: "PENDING",
-                    intent: "WEB",
-                    supervisor_plan: [
-                        `[WEB] Navigate to URL: ${url}`,
-                        `[WEB] Extract real estate property details for João Pessoa.`
-                    ],
-                    created_at: admin.firestore.FieldValue.serverTimestamp()
-                });
-            }
-            else if (type === 'CHANGE') {
-                // Update hash in TargetURLs
-                const targetQuery = await targetUrlsRef.where('url', '==', url).get();
-                if (!targetQuery.empty) {
-                    targetQuery.forEach(async (doc) => {
-                        await doc.ref.update({ last_content_hash: new_hash });
-                    });
-                }
-                else {
-                    // Add it if it somehow isn't there
-                    await targetUrlsRef.add({
-                        url: url,
-                        last_content_hash: new_hash,
-                    });
-                }
-                let fullImageBase64 = null;
-                if (image_base64) {
-                    const bucket = admin.storage().bucket();
-                    const file = bucket.file(image_base64);
-                    try {
-                        const [buffer] = await file.download();
-                        fullImageBase64 = buffer.toString('base64');
-                    }
-                    catch (e) {
-                        console.error("Failed to download image from storage", e);
-                    }
-                }
-                // Enqueue data for deep extraction
-                const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
-                await queue.enqueue({
-                    dataToParse: raw_text,
-                    source: 'python_playwright_scraper',
-                    url: url,
-                    new_hash: new_hash,
-                    image_base64: fullImageBase64
-                });
-            }
-        }
-        response.status(200).json({ message: `Triage action ${action} processed successfully for ${type}.` });
-    }
-    catch (error) {
-        console.error("Error processing triage action:", error);
-        response.status(500).send("Internal Server Error");
-    }
-});
-exports.reportDetectedChange = (0, https_1.onRequest)(async (request, response) => {
-    // Require Bearer token in authorization header
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const payload = request.body;
-        if (!payload || !payload.url || !payload.new_hash || !payload.raw_text) {
-            response.status(400).send("Invalid payload format. Expected url, new_hash, and raw_text.");
-            return;
-        }
-        let storagePath = null;
-        if (payload.image_base64) {
-            const bucket = admin.storage().bucket();
-            const imageBuffer = Buffer.from(payload.image_base64, 'base64');
-            const filename = `changes/${Date.now()}_${payload.url.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
-            const file = bucket.file(filename);
-            await file.save(imageBuffer, {
-                metadata: { contentType: 'image/png' },
             });
-            storagePath = filename;
+            response.status(200).json(sources);
         }
-        const reviewInboxRef = db.collection("ReviewInbox");
-        const newDocRef = reviewInboxRef.doc();
-        await newDocRef.set({
-            id: newDocRef.id,
-            type: 'CHANGE',
-            status: 'PENDING',
-            url: payload.url,
-            new_hash: payload.new_hash,
-            raw_text: payload.raw_text,
-            image_base64: storagePath, // Store path instead of massive string
-            created_at: admin.firestore.FieldValue.serverTimestamp()
-        });
-        response.status(200).json({ message: "Change reported successfully." });
-    }
-    catch (error) {
-        console.error("Error reporting change:", error);
-        response.status(500).send("Internal Server Error");
-    }
+        catch (error) {
+            console.error("Error fetching discovery sources:", error);
+            response.status(500).send("Internal Server Error");
+        }
+    });
 });
-exports.getTargetUrls = (0, https_1.onRequest)(async (request, response) => {
-    // Require Bearer token in authorization header (same logic as ingestPropertyData)
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    const token = authHeader.split("Bearer ")[1];
-    const expectedSecret = process.env.WEBHOOK_SECRET;
-    if (!token || (expectedSecret && token !== expectedSecret)) {
-        response.status(401).send("Unauthorized");
-        return;
-    }
-    try {
-        const targetUrlsRef = db.collection("TargetURLs");
-        const snapshot = await targetUrlsRef.get();
-        const urls = [];
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.url) {
-                urls.push({
-                    url: data.url.trim().replace(/\/$/, ""),
-                    last_content_hash: data.last_content_hash || null,
-                });
+exports.processTriageAction = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
+            return;
+        }
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!token || (expectedSecret && token !== expectedSecret)) {
+            response.status(401).send("Unauthorized");
+            return;
+        }
+        try {
+            const payload = request.body;
+            if (!payload || !payload.id || !payload.action || !payload.type) {
+                response.status(400).send("Invalid payload format. Expected id, action (APPROVE/DISCARD), and type.");
+                return;
             }
-        });
-        response.status(200).json(urls);
-    }
-    catch (error) {
-        console.error("Error fetching target URLs:", error);
-        response.status(500).send("Internal Server Error");
-    }
+            const { id, action, type, url, new_hash, raw_text, image_base64 } = payload;
+            if (action !== 'APPROVE' && action !== 'DISCARD') {
+                response.status(400).send("Invalid action. Must be APPROVE or DISCARD.");
+                return;
+            }
+            const reviewInboxRef = db.collection("ReviewInbox");
+            const docRef = reviewInboxRef.doc(id);
+            const docSnap = await docRef.get();
+            if (!docSnap.exists) {
+                response.status(404).send("Item not found in Review Inbox.");
+                return;
+            }
+            await docRef.update({ status: action === 'APPROVE' ? 'APPROVED' : 'DISCARDED' });
+            if (action === 'APPROVE') {
+                const targetUrlsRef = db.collection("TargetURLs");
+                if (type === 'DISCOVERY') {
+                    // Check if already in TargetURLs
+                    const targetQuery = await targetUrlsRef.where('url', '==', url).get();
+                    if (targetQuery.empty) {
+                        await targetUrlsRef.add({
+                            url: url,
+                            last_content_hash: null,
+                        });
+                    }
+                    // Dispatch scraping mission
+                    const taskSessionsRef = db.collection("task_sessions");
+                    await taskSessionsRef.add({
+                        doc_id: taskSessionsRef.doc().id, // Let Firestore generate ID, but save it in field
+                        status: "PENDING",
+                        intent: "WEB",
+                        supervisor_plan: [
+                            `[WEB] Navigate to URL: ${url}`,
+                            `[WEB] Extract real estate property details for João Pessoa.`
+                        ],
+                        created_at: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                else if (type === 'CHANGE') {
+                    // Update hash in TargetURLs
+                    const targetQuery = await targetUrlsRef.where('url', '==', url).get();
+                    if (!targetQuery.empty) {
+                        targetQuery.forEach(async (doc) => {
+                            await doc.ref.update({ last_content_hash: new_hash });
+                        });
+                    }
+                    else {
+                        // Add it if it somehow isn't there
+                        await targetUrlsRef.add({
+                            url: url,
+                            last_content_hash: new_hash,
+                        });
+                    }
+                    let fullImageBase64 = null;
+                    if (image_base64) {
+                        const bucket = admin.storage().bucket();
+                        const file = bucket.file(image_base64);
+                        try {
+                            const [buffer] = await file.download();
+                            fullImageBase64 = buffer.toString('base64');
+                        }
+                        catch (e) {
+                            console.error("Failed to download image from storage", e);
+                        }
+                    }
+                    // Enqueue data for deep extraction
+                    const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
+                    await queue.enqueue({
+                        dataToParse: raw_text,
+                        source: 'python_playwright_scraper',
+                        url: url,
+                        new_hash: new_hash,
+                        image_base64: fullImageBase64
+                    });
+                }
+            }
+            response.status(200).json({ message: `Triage action ${action} processed successfully for ${type}.` });
+        }
+        catch (error) {
+            console.error("Error processing triage action:", error);
+            response.status(500).send("Internal Server Error");
+        }
+    });
+});
+exports.reportDetectedChange = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        // Require Bearer token in authorization header
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
+            return;
+        }
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!token || (expectedSecret && token !== expectedSecret)) {
+            response.status(401).send("Unauthorized");
+            return;
+        }
+        try {
+            const payload = request.body;
+            if (!payload || !payload.url || !payload.new_hash || !payload.raw_text) {
+                response.status(400).send("Invalid payload format. Expected url, new_hash, and raw_text.");
+                return;
+            }
+            let storagePath = null;
+            if (payload.image_base64) {
+                const bucket = admin.storage().bucket();
+                const imageBuffer = Buffer.from(payload.image_base64, 'base64');
+                const filename = `changes/${Date.now()}_${payload.url.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+                const file = bucket.file(filename);
+                await file.save(imageBuffer, {
+                    metadata: { contentType: 'image/png' },
+                });
+                storagePath = filename;
+            }
+            const reviewInboxRef = db.collection("ReviewInbox");
+            const newDocRef = reviewInboxRef.doc();
+            await newDocRef.set({
+                id: newDocRef.id,
+                type: 'CHANGE',
+                status: 'PENDING',
+                url: payload.url,
+                new_hash: payload.new_hash,
+                raw_text: payload.raw_text,
+                image_base64: storagePath, // Store path instead of massive string
+                created_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+            response.status(200).json({ message: "Change reported successfully." });
+        }
+        catch (error) {
+            console.error("Error reporting change:", error);
+            response.status(500).send("Internal Server Error");
+        }
+    });
+});
+exports.getTargetUrls = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        // Require Bearer token in authorization header (same logic as ingestPropertyData)
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            response.status(401).send("Unauthorized");
+            return;
+        }
+        const token = authHeader.split("Bearer ")[1];
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!token || (expectedSecret && token !== expectedSecret)) {
+            response.status(401).send("Unauthorized");
+            return;
+        }
+        try {
+            const targetUrlsRef = db.collection("TargetURLs");
+            const snapshot = await targetUrlsRef.get();
+            const urls = [];
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.url) {
+                    urls.push({
+                        url: data.url.trim().replace(/\/$/, ""),
+                        last_content_hash: data.last_content_hash || null,
+                    });
+                }
+            });
+            response.status(200).json(urls);
+        }
+        catch (error) {
+            console.error("Error fetching target URLs:", error);
+            response.status(500).send("Internal Server Error");
+        }
+    });
 });
 // WhatsApp Webhook
-exports.whatsappWebhook = (0, https_1.onRequest)(async (request, response) => {
-    if (request.method === 'GET') {
-        // WhatsApp Verification
-        const mode = request.query['hub.mode'];
-        const token = request.query['hub.verify_token'];
-        const challenge = request.query['hub.challenge'];
-        if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-            response.status(200).send(challenge);
+exports.whatsappWebhook = (0, https_1.onRequest)((request, response) => {
+    corsHandler(request, response, async () => {
+        if (request.method === 'GET') {
+            // WhatsApp Verification
+            const mode = request.query['hub.mode'];
+            const token = request.query['hub.verify_token'];
+            const challenge = request.query['hub.challenge'];
+            if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+                response.status(200).send(challenge);
+            }
+            else {
+                response.sendStatus(403);
+            }
+            return;
         }
-        else {
-            response.sendStatus(403);
-        }
-        return;
-    }
-    if (request.method === 'POST') {
-        try {
-            const body = request.body;
-            if (body.object) {
-                if (body.entry && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
-                    const message = body.entry[0].changes[0].value.messages[0];
-                    const from = message.from; // Sender's phone number
-                    const text = message.text?.body;
-                    if (text) {
-                        // Intent Router
-                        const intentPrompt = `
+        if (request.method === 'POST') {
+            try {
+                const body = request.body;
+                if (body.object) {
+                    if (body.entry && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
+                        const message = body.entry[0].changes[0].value.messages[0];
+                        const from = message.from; // Sender's phone number
+                        const text = message.text?.body;
+                        if (text) {
+                            // Intent Router
+                            const intentPrompt = `
               Analyze the following WhatsApp message from a real estate context.
               Determine the user's intent. Return ONLY "INGESTION" if the message contains property details to be added to the catalog (e.g., price, area, description, "I have a property").
               Return ONLY "INQUIRY" if the user is asking a question about properties, prices, or recommendations (e.g., "What do you have in Bessa?", "Looking for a 2 bedroom").
@@ -741,55 +760,56 @@ exports.whatsappWebhook = (0, https_1.onRequest)(async (request, response) => {
 
               Message: "${text}"
             `;
-                        const routerModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
-                        const routerResult = await routerModel.generateContent({
-                            contents: [{ role: 'user', parts: [{ text: intentPrompt }] }],
-                        });
-                        const intent = routerResult.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toUpperCase();
-                        if (intent === 'INGESTION') {
-                            // Queue for ingestion
-                            const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
-                            try {
-                                await queue.enqueue({
-                                    dataToParse: text,
-                                    source: 'whatsapp_broker'
-                                });
-                                console.log(`Queued WhatsApp ingestion for ${from}`);
+                            const routerModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+                            const routerResult = await routerModel.generateContent({
+                                contents: [{ role: 'user', parts: [{ text: intentPrompt }] }],
+                            });
+                            const intent = routerResult.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toUpperCase();
+                            if (intent === 'INGESTION') {
+                                // Queue for ingestion
+                                const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
+                                try {
+                                    await queue.enqueue({
+                                        dataToParse: text,
+                                        source: 'whatsapp_broker'
+                                    });
+                                    console.log(`Queued WhatsApp ingestion for ${from}`);
+                                }
+                                catch (e) {
+                                    console.error("Failed to queue WhatsApp ingestion", e);
+                                }
+                                // Send summary/confirmation via WhatsApp API (mocked here, would use actual WhatsApp API)
+                                console.log(`Sending WhatsApp reply to ${from}: "Entendi! Estou processando as informações deste imóvel e adicionando ao catálogo."`);
                             }
-                            catch (e) {
-                                console.error("Failed to queue WhatsApp ingestion", e);
-                            }
-                            // Send summary/confirmation via WhatsApp API (mocked here, would use actual WhatsApp API)
-                            console.log(`Sending WhatsApp reply to ${from}: "Entendi! Estou processando as informações deste imóvel e adicionando ao catálogo."`);
-                        }
-                        else {
-                            // Inquiry handling (RAG simulation)
-                            const ragPrompt = `
+                            else {
+                                // Inquiry handling (RAG simulation)
+                                const ragPrompt = `
                 You are a helpful Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa).
                 Answer the user's question concisely in Brazilian Portuguese. Highlight ROI and local advantages if relevant.
 
                 User question: "${text}"
               `;
-                            const ragModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
-                            const ragResult = await ragModel.generateContent({
-                                contents: [{ role: 'user', parts: [{ text: ragPrompt }] }],
-                            });
-                            const replyText = ragResult.response.candidates?.[0]?.content?.parts?.[0]?.text;
-                            // Send reply via WhatsApp API (mocked)
-                            console.log(`Sending WhatsApp reply to ${from}: "${replyText}"`);
+                                const ragModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+                                const ragResult = await ragModel.generateContent({
+                                    contents: [{ role: 'user', parts: [{ text: ragPrompt }] }],
+                                });
+                                const replyText = ragResult.response.candidates?.[0]?.content?.parts?.[0]?.text;
+                                // Send reply via WhatsApp API (mocked)
+                                console.log(`Sending WhatsApp reply to ${from}: "${replyText}"`);
+                            }
                         }
                     }
+                    response.sendStatus(200);
                 }
-                response.sendStatus(200);
+                else {
+                    response.sendStatus(404);
+                }
             }
-            else {
-                response.sendStatus(404);
+            catch (error) {
+                console.error("Error processing WhatsApp webhook:", error);
+                response.sendStatus(500);
             }
         }
-        catch (error) {
-            console.error("Error processing WhatsApp webhook:", error);
-            response.sendStatus(500);
-        }
-    }
+    });
 });
 //# sourceMappingURL=index.js.map

@@ -5,8 +5,11 @@ import { getFunctions } from "firebase-admin/functions";
 import { VertexAI } from "@google-cloud/vertexai";
 import { PropertySchema } from "./schema";
 import { fuzzyMatchNeighborhood } from "./utils";
+import cors = require("cors");
 
 admin.initializeApp();
+
+const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 
 // Initialize Vertex AI
@@ -221,7 +224,8 @@ export const processPropertyData = onTaskDispatched({
 });
 
 
-export const ingestPropertyData = onRequest(async (request, response) => {
+export const ingestPropertyData = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     response.status(401).send("Unauthorized");
@@ -276,11 +280,13 @@ export const ingestPropertyData = onRequest(async (request, response) => {
     console.error("Error queueing property data:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
 
 // HTTP Cloud Function to filter discovered URLs using Gemini
-export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, async (request, response) => {
+export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, (request, response) => {
+  corsHandler(request, response, async () => {
   // Require Bearer token in authorization header
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -366,9 +372,11 @@ export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, async (re
     console.error("Error filtering URLs:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
-export const dispatchScrapingMission = onRequest(async (request, response) => {
+export const dispatchScrapingMission = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     response.status(401).send("Unauthorized");
@@ -413,9 +421,11 @@ export const dispatchScrapingMission = onRequest(async (request, response) => {
     console.error("Error dispatching scraping mission:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
-export const addDiscoveredUrls = onRequest(async (request, response) => {
+export const addDiscoveredUrls = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   // Require Bearer token in authorization header
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -502,10 +512,12 @@ export const addDiscoveredUrls = onRequest(async (request, response) => {
     console.error("Error adding discovered URLs:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
 // HTTP Cloud Function to get dynamic target URLs for the scraper
-export const getDiscoverySources = onRequest(async (request, response) => {
+export const getDiscoverySources = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   // Require Bearer token in authorization header
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -540,9 +552,11 @@ export const getDiscoverySources = onRequest(async (request, response) => {
     console.error("Error fetching discovery sources:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
-export const processTriageAction = onRequest(async (request, response) => {
+export const processTriageAction = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     response.status(401).send("Unauthorized");
@@ -650,9 +664,11 @@ export const processTriageAction = onRequest(async (request, response) => {
     console.error("Error processing triage action:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
-export const reportDetectedChange = onRequest(async (request, response) => {
+export const reportDetectedChange = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   // Require Bearer token in authorization header
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -705,9 +721,11 @@ export const reportDetectedChange = onRequest(async (request, response) => {
     console.error("Error reporting change:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
-export const getTargetUrls = onRequest(async (request, response) => {
+export const getTargetUrls = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   // Require Bearer token in authorization header (same logic as ingestPropertyData)
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -741,11 +759,13 @@ export const getTargetUrls = onRequest(async (request, response) => {
     console.error("Error fetching target URLs:", error);
     response.status(500).send("Internal Server Error");
   }
+  });
 });
 
 
 // WhatsApp Webhook
-export const whatsappWebhook = onRequest(async (request, response) => {
+export const whatsappWebhook = onRequest((request, response) => {
+  corsHandler(request, response, async () => {
   if (request.method === 'GET') {
     // WhatsApp Verification
     const mode = request.query['hub.mode'];
@@ -829,4 +849,5 @@ export const whatsappWebhook = onRequest(async (request, response) => {
       response.sendStatus(500);
     }
   }
+  });
 });
