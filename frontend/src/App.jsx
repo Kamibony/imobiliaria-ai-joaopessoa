@@ -90,9 +90,8 @@ function App() {
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
 
-  const [activeTab, setActiveTab] = useState('ingestao') // 'ingestao', 'catalogo', 'fontes', 'mapa', 'discovery', 'triage'
-  const [token, setToken] = useState('')
-  const [data, setData] = useState('')
+  const [activeTab, setActiveTab] = useState('discovery')
+    const [data, setData] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [properties, setProperties] = useState([])
@@ -313,6 +312,14 @@ function App() {
 
   const handleTriageAction = async (item, action) => {
     setTriageMessage('');
+    let token = '';
+    try {
+      token = await auth.currentUser.getIdToken();
+    } catch (e) {
+      setTriageMessage('Erro de autenticação: Não foi possível obter o token.');
+      return;
+    }
+    setTriageMessage('Processando...');
     try {
       const response = await fetch('https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/processTriageAction', {
         method: 'POST',
@@ -343,11 +350,14 @@ function App() {
   };
 
   const handleAnalyzeAndSave = async () => {
-    if (!token) {
-      setMessage('Por favor, forneça um token Bearer.')
-      return
+    let token = '';
+    try {
+      token = await auth.currentUser.getIdToken();
+    } catch (e) {
+      setMessage('Erro de autenticação: Não foi possível obter o token.');
+      return;
     }
-    if (!data) {
+if (!data) {
       setMessage('Por favor, forneça os dados do imóvel.')
       return
     }
@@ -432,85 +442,115 @@ function App() {
 
       <div className="tabs">
         <button
-          className={`tab-btn ${activeTab === 'ingestao' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ingestao')}
-        >
-          Ingestão (Upload)
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'catalogo' ? 'active' : ''}`}
-          onClick={() => setActiveTab('catalogo')}
-        >
-          Catálogo de Imóveis (Dashboard)
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'fontes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('fontes')}
-        >
-          Fontes (URLs)
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'mapa' ? 'active' : ''}`}
-          onClick={() => setActiveTab('mapa')}
-        >
-          Mapa & Analytics
-        </button>
-        <button
           className={`tab-btn ${activeTab === 'discovery' ? 'active' : ''}`}
           onClick={() => setActiveTab('discovery')}
         >
-          Fontes de Descoberta
+          Radar de Mercado
         </button>
         <button
           className={`tab-btn ${activeTab === 'triage' ? 'active' : ''}`}
           onClick={() => setActiveTab('triage')}
         >
-          HITL Triage Center
+          Caixa de Entrada
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'catalogo-mapa' ? 'active' : ''}`}
+          onClick={() => setActiveTab('catalogo-mapa')}
+        >
+          Catálogo & Mapa
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'acoes-manuais' ? 'active' : ''}`}
+          onClick={() => setActiveTab('acoes-manuais')}
+        >
+          Ações Manuais
         </button>
       </div>
 
-      {activeTab === 'ingestao' && (
-        <div className="card">
-          <div className="form-group">
-            <label htmlFor="token">Token Bearer (Autorização)</label>
-            <input
-              type="password"
-              id="token"
-              placeholder="Insira o token seguro"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-            />
+      {activeTab === 'acoes-manuais' && (
+        <>
+          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
+            Ações Manuais: "Use estas ferramentas apenas para forçar extrações manuais de URLs específicas ou colar textos brutos."
           </div>
-
-          <div className="form-group">
-            <label htmlFor="data">Dados Desestruturados do Imóvel</label>
-            <textarea
-              id="data"
-              placeholder="Cole aqui o texto bruto de PPT, PDF, WhatsApp ou sites..."
-              value={data}
-              onChange={(e) => setData(e.target.value)}
-              rows={10}
-            />
-          </div>
-
-          <button
-            onClick={handleAnalyzeAndSave}
-            disabled={loading}
-            className="submit-btn"
-          >
-            {loading ? 'Analisando e Salvando...' : 'Analisar e Salvar'}
-          </button>
-
-          {message && (
-            <div className={`message ${message.startsWith('Sucesso') ? 'success' : 'error'}`}>
-              {message}
+          <div className="card" style={{ marginBottom: '2rem' }}>
+            <h2>Ingestão de Dados (Upload Manual)</h2>
+            <div className="form-group">
+              <label htmlFor="data">Dados Desestruturados do Imóvel</label>
+              <textarea
+                id="data"
+                placeholder="Cole aqui o texto bruto de PPT, PDF, WhatsApp ou sites..."
+                value={data}
+                onChange={(e) => setData(e.target.value)}
+                rows={10}
+              />
             </div>
-          )}
-        </div>
+
+            <button
+              onClick={handleAnalyzeAndSave}
+              disabled={loading}
+              className="submit-btn"
+            >
+              {loading ? 'Analisando e Salvando...' : 'Analisar e Salvar'}
+            </button>
+
+            {message && (
+              <div className={`message ${message.startsWith('Sucesso') ? 'success' : 'error'}`}>
+                {message}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h2>Gerenciar URLs Alvo</h2>
+
+            <form onSubmit={handleAddUrl} style={{ marginBottom: '2rem' }}>
+              <div className="form-group">
+                <label htmlFor="newUrl">Adicionar Nova URL</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="url"
+                    id="newUrl"
+                    placeholder="https://exemplo.com"
+                    value={newUrl}
+                    onChange={(e) => setNewUrl(e.target.value)}
+                    required
+                    style={{ flexGrow: 1 }}
+                  />
+                  <button type="submit" className="submit-btn" style={{ marginTop: 0, width: 'auto' }}>Adicionar</button>
+                </div>
+              </div>
+              {urlMessage && <div className={`message ${urlMessage.includes('Erro') ? 'error' : 'success'}`}>{urlMessage}</div>}
+            </form>
+
+            <div style={{ textAlign: 'left' }}>
+              <h3>URLs Cadastradas</h3>
+              {targetUrls.length === 0 ? (
+                <p>Nenhuma URL cadastrada.</p>
+              ) : (
+                <ul style={{ listStyleType: 'none', padding: 0 }}>
+                  {targetUrls.map((target) => (
+                    <li key={target.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #ccc' }}>
+                      <span style={{ wordBreak: 'break-all', marginRight: '1rem' }}>{target.url}</span>
+                      <button
+                        onClick={() => handleDeleteUrl(target.id)}
+                        style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        Deletar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
-      {activeTab === 'catalogo' && (
+      {activeTab === 'catalogo-mapa' && (
         <div className="catalog-container">
+          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
+            Catálogo & Mapa: "Visualize e analise todos os imóveis verificados e processados."
+          </div>
           {renderFilterBar()}
           {filteredProperties.length === 0 ? (
             <p>Nenhum imóvel encontrado.</p>
@@ -528,6 +568,9 @@ function App() {
 
       {activeTab === 'discovery' && (
         <div className="card">
+          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
+            Radar de Mercado: "Adicione os sites principais das construtoras. O robô monitorará essas fontes diariamente em busca de novos empreendimentos."
+          </div>
           <h2>Fontes de Descoberta (Seed Domains)</h2>
           <p>Adicione URLs base para o Spider explorar (ex: massai.com.br/empreendimentos). O AI irá varrer e enviar possíveis novos projetos para o Triage Center.</p>
           <form onSubmit={handleAddSource} style={{ marginBottom: '2rem' }}>
@@ -574,19 +617,13 @@ function App() {
 
       {activeTab === 'triage' && (
         <div className="card" style={{ width: '100%', maxWidth: '1000px' }}>
+          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
+            Caixa de Entrada: "Avalie as descobertas da IA. Aprovar um item iniciará a extração profunda de dados de forma automática."
+          </div>
           <h2>HITL Triage Center (Review Inbox)</h2>
           <p>Revise novas descobertas e mudanças detectadas antes de processá-las.</p>
 
-          <div className="form-group" style={{ marginBottom: '2rem' }}>
-            <label htmlFor="triageToken">Token Bearer (Autorização para Ações)</label>
-            <input
-              type="password"
-              id="triageToken"
-              placeholder="Insira o token seguro"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-            />
-          </div>
+
 
           {triageMessage && <div className={`message ${triageMessage.includes('Erro') ? 'error' : 'success'}`}>{triageMessage}</div>}
 
@@ -672,56 +709,11 @@ function App() {
         </div>
       )}
 
-      {activeTab === 'fontes' && (
-        <div className="card">
-          <h2>Gerenciar URLs Alvo</h2>
 
-          <form onSubmit={handleAddUrl} style={{ marginBottom: '2rem' }}>
-            <div className="form-group">
-              <label htmlFor="newUrl">Adicionar Nova URL</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="url"
-                  id="newUrl"
-                  placeholder="https://exemplo.com"
-                  value={newUrl}
-                  onChange={(e) => setNewUrl(e.target.value)}
-                  required
-                  style={{ flexGrow: 1 }}
-                />
-                <button type="submit" className="submit-btn" style={{ marginTop: 0, width: 'auto' }}>Adicionar</button>
-              </div>
-            </div>
-            {urlMessage && <div className={`message ${urlMessage.includes('Erro') ? 'error' : 'success'}`}>{urlMessage}</div>}
-          </form>
 
-          <div style={{ textAlign: 'left' }}>
-            <h3>URLs Cadastradas</h3>
-            {targetUrls.length === 0 ? (
-              <p>Nenhuma URL cadastrada.</p>
-            ) : (
-              <ul style={{ listStyleType: 'none', padding: 0 }}>
-                {targetUrls.map((target) => (
-                  <li key={target.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #ccc' }}>
-                    <span style={{ wordBreak: 'break-all', marginRight: '1rem' }}>{target.url}</span>
-                    <button
-                      onClick={() => handleDeleteUrl(target.id)}
-                      style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      Deletar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'mapa' && (
+      {activeTab === 'catalogo-mapa' && (
         <div className="card" style={{ padding: '1rem', width: '100%' }}>
           <h2>Mapa de Imóveis</h2>
-          {renderFilterBar()}
           <div style={{ height: '400px', width: '100%', marginBottom: '2rem', zIndex: 0 }}>
             <MapContainer center={[-7.115, -34.863]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }}>
               <TileLayer
