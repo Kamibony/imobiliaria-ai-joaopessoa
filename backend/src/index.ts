@@ -203,6 +203,17 @@ export const processPropertyData = onTaskDispatched({
     } else {
       await docRef.set(propertyData);
     }
+
+    // Also save hash back to TargetURLs if we have the original URL from payload
+    if (req.data.url && req.data.new_hash) {
+       const targetUrlsRef = db.collection("TargetURLs");
+       const targetQuery = await targetUrlsRef.where('url', '==', req.data.url).get();
+       if (!targetQuery.empty) {
+           targetQuery.forEach(async (doc) => {
+               await doc.ref.update({ last_content_hash: req.data.new_hash });
+           });
+       }
+    }
   } catch (error) {
     console.error("Error processing property data task:", error);
     throw error; // Will retry via Cloud Tasks
@@ -252,6 +263,8 @@ export const ingestPropertyData = onRequest(async (request, response) => {
       await queue.enqueue({
         dataToParse,
         source,
+        url: payload.url,
+        new_hash: payload.new_hash,
         image_base64: payload.image_base64
       });
     } catch (e) {
@@ -433,15 +446,26 @@ export const addDiscoveredUrls = onRequest(async (request, response) => {
     }
 
     const targetUrlsRef = db.collection("TargetURLs");
+    const reviewInboxRef = db.collection("ReviewInbox");
 
-    // Get existing URLs to prevent duplicates
-    const snapshot = await targetUrlsRef.get();
+    // Get existing URLs from TargetURLs to prevent pushing already known URLs to review
+    const targetSnapshot = await targetUrlsRef.get();
     const existingUrls = new Set<string>();
 
-    snapshot.forEach((doc) => {
+    targetSnapshot.forEach((doc) => {
       const data = doc.data();
       if (data.url) {
         existingUrls.add(data.url.trim().replace(/\/$/, ""));
+      }
+    });
+
+    // Get URLs already in ReviewInbox to prevent duplicate queue entries
+    const inboxSnapshot = await reviewInboxRef.where("type", "==", "DISCOVERY").where("status", "==", "PENDING").get();
+    const inboxUrls = new Set<string>();
+    inboxSnapshot.forEach((doc) => {
+      const data = doc.data();
+      if(data.url) {
+        inboxUrls.add(data.url.trim().replace(/\/$/, ""));
       }
     });
 
@@ -449,14 +473,19 @@ export const addDiscoveredUrls = onRequest(async (request, response) => {
 
     const normalizeUrl = (url: string) => url.trim().replace(/\/$/, "");
 
-    // Add missing URLs
     const batch = db.batch();
     for (const rawUrl of newUrls) {
       const url = normalizeUrl(rawUrl);
-      if (!existingUrls.has(url)) {
-        const newDocRef = targetUrlsRef.doc();
-        batch.set(newDocRef, { url });
-        existingUrls.add(url); // Ensure we don't add duplicates from the request itself
+      if (!existingUrls.has(url) && !inboxUrls.has(url)) {
+        const newDocRef = reviewInboxRef.doc();
+        batch.set(newDocRef, {
+          id: newDocRef.id,
+          type: 'DISCOVERY',
+          status: 'PENDING',
+          url,
+          created_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+        inboxUrls.add(url);
         addedCount++;
       }
     }
@@ -466,7 +495,7 @@ export const addDiscoveredUrls = onRequest(async (request, response) => {
     }
 
     response.status(200).json({
-      message: `Successfully processed URLs. Added ${addedCount} new URLs.`,
+      message: `Successfully processed URLs. Added ${addedCount} new URLs to ReviewInbox.`,
       addedCount
     });
   } catch (error) {
@@ -476,6 +505,208 @@ export const addDiscoveredUrls = onRequest(async (request, response) => {
 });
 
 // HTTP Cloud Function to get dynamic target URLs for the scraper
+export const getDiscoverySources = onRequest(async (request, response) => {
+  // Require Bearer token in authorization header
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  const expectedSecret = process.env.WEBHOOK_SECRET;
+  if (!token || (expectedSecret && token !== expectedSecret)) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const discoverySourcesRef = db.collection("DiscoverySources");
+    const snapshot = await discoverySourcesRef.get();
+
+    const sources: any[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.source) {
+        sources.push({
+          id: doc.id,
+          source: data.source,
+          type: data.type || 'URL',
+        });
+      }
+    });
+
+    response.status(200).json(sources);
+  } catch (error) {
+    console.error("Error fetching discovery sources:", error);
+    response.status(500).send("Internal Server Error");
+  }
+});
+
+export const processTriageAction = onRequest(async (request, response) => {
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  const expectedSecret = process.env.WEBHOOK_SECRET;
+  if (!token || (expectedSecret && token !== expectedSecret)) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const payload = request.body;
+    if (!payload || !payload.id || !payload.action || !payload.type) {
+      response.status(400).send("Invalid payload format. Expected id, action (APPROVE/DISCARD), and type.");
+      return;
+    }
+
+    const { id, action, type, url, new_hash, raw_text, image_base64 } = payload;
+
+    if (action !== 'APPROVE' && action !== 'DISCARD') {
+        response.status(400).send("Invalid action. Must be APPROVE or DISCARD.");
+        return;
+    }
+
+    const reviewInboxRef = db.collection("ReviewInbox");
+    const docRef = reviewInboxRef.doc(id);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+        response.status(404).send("Item not found in Review Inbox.");
+        return;
+    }
+
+    await docRef.update({ status: action === 'APPROVE' ? 'APPROVED' : 'DISCARDED' });
+
+    if (action === 'APPROVE') {
+        const targetUrlsRef = db.collection("TargetURLs");
+
+        if (type === 'DISCOVERY') {
+            // Check if already in TargetURLs
+            const targetQuery = await targetUrlsRef.where('url', '==', url).get();
+            if (targetQuery.empty) {
+                await targetUrlsRef.add({
+                    url: url,
+                    last_content_hash: null,
+                });
+            }
+
+            // Dispatch scraping mission
+            const taskSessionsRef = db.collection("task_sessions");
+            await taskSessionsRef.add({
+                doc_id: taskSessionsRef.doc().id, // Let Firestore generate ID, but save it in field
+                status: "PENDING",
+                intent: "WEB",
+                supervisor_plan: [
+                    `[WEB] Navigate to URL: ${url}`,
+                    `[WEB] Extract real estate property details for João Pessoa.`
+                ],
+                created_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+        } else if (type === 'CHANGE') {
+             // Update hash in TargetURLs
+             const targetQuery = await targetUrlsRef.where('url', '==', url).get();
+             if (!targetQuery.empty) {
+                targetQuery.forEach(async (doc) => {
+                     await doc.ref.update({ last_content_hash: new_hash });
+                });
+             } else {
+                 // Add it if it somehow isn't there
+                 await targetUrlsRef.add({
+                    url: url,
+                    last_content_hash: new_hash,
+                });
+             }
+
+             let fullImageBase64 = null;
+             if (image_base64) {
+                 const bucket = admin.storage().bucket();
+                 const file = bucket.file(image_base64);
+                 try {
+                     const [buffer] = await file.download();
+                     fullImageBase64 = buffer.toString('base64');
+                 } catch (e) {
+                     console.error("Failed to download image from storage", e);
+                 }
+             }
+
+             // Enqueue data for deep extraction
+             const queue = getFunctions().taskQueue('processPropertyData');
+             await queue.enqueue({
+                 dataToParse: raw_text,
+                 source: 'python_playwright_scraper',
+                 url: url,
+                 new_hash: new_hash,
+                 image_base64: fullImageBase64
+             });
+        }
+    }
+
+    response.status(200).json({ message: `Triage action ${action} processed successfully for ${type}.` });
+
+  } catch (error) {
+    console.error("Error processing triage action:", error);
+    response.status(500).send("Internal Server Error");
+  }
+});
+
+export const reportDetectedChange = onRequest(async (request, response) => {
+  // Require Bearer token in authorization header
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  const expectedSecret = process.env.WEBHOOK_SECRET;
+  if (!token || (expectedSecret && token !== expectedSecret)) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const payload = request.body;
+
+    if (!payload || !payload.url || !payload.new_hash || !payload.raw_text) {
+      response.status(400).send("Invalid payload format. Expected url, new_hash, and raw_text.");
+      return;
+    }
+
+    let storagePath = null;
+    if (payload.image_base64) {
+      const bucket = admin.storage().bucket();
+      const imageBuffer = Buffer.from(payload.image_base64, 'base64');
+      const filename = `changes/${Date.now()}_${payload.url.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+      const file = bucket.file(filename);
+      await file.save(imageBuffer, {
+        metadata: { contentType: 'image/png' },
+      });
+      storagePath = filename;
+    }
+
+    const reviewInboxRef = db.collection("ReviewInbox");
+    const newDocRef = reviewInboxRef.doc();
+
+    await newDocRef.set({
+      id: newDocRef.id,
+      type: 'CHANGE',
+      status: 'PENDING',
+      url: payload.url,
+      new_hash: payload.new_hash,
+      raw_text: payload.raw_text,
+      image_base64: storagePath, // Store path instead of massive string
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    response.status(200).json({ message: "Change reported successfully." });
+  } catch (error) {
+    console.error("Error reporting change:", error);
+    response.status(500).send("Internal Server Error");
+  }
+});
+
 export const getTargetUrls = onRequest(async (request, response) => {
   // Require Bearer token in authorization header (same logic as ingestPropertyData)
   const authHeader = request.headers.authorization;
@@ -494,11 +725,14 @@ export const getTargetUrls = onRequest(async (request, response) => {
     const targetUrlsRef = db.collection("TargetURLs");
     const snapshot = await targetUrlsRef.get();
 
-    const urls: string[] = [];
+    const urls: any[] = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
       if (data.url) {
-        urls.push(data.url.trim().replace(/\/$/, ""));
+        urls.push({
+          url: data.url.trim().replace(/\/$/, ""),
+          last_content_hash: data.last_content_hash || null,
+        });
       }
     });
 
