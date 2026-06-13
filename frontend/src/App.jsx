@@ -90,7 +90,7 @@ function App() {
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
 
-  const [activeTab, setActiveTab] = useState('ingestao') // 'ingestao', 'catalogo', or 'fontes'
+  const [activeTab, setActiveTab] = useState('ingestao') // 'ingestao', 'catalogo', 'fontes', 'mapa', 'discovery', 'triage'
   const [token, setToken] = useState('')
   const [data, setData] = useState('')
   const [loading, setLoading] = useState(false)
@@ -99,6 +99,13 @@ function App() {
   const [targetUrls, setTargetUrls] = useState([])
   const [newUrl, setNewUrl] = useState('')
   const [urlMessage, setUrlMessage] = useState('')
+
+  const [discoverySources, setDiscoverySources] = useState([]);
+  const [newSource, setNewSource] = useState('');
+  const [sourceMessage, setSourceMessage] = useState('');
+
+  const [triageItems, setTriageItems] = useState([]);
+  const [triageMessage, setTriageMessage] = useState('');
 
   const [filterBairro, setFilterBairro] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
@@ -203,10 +210,32 @@ function App() {
       setTargetUrls(urlsData);
     });
 
+    // Listen to changes in the "DiscoverySources" collection
+    const discoverySourcesRef = collection(db, 'DiscoverySources');
+    const unsubscribeSources = onSnapshot(discoverySourcesRef, (snapshot) => {
+      const sourcesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setDiscoverySources(sourcesData);
+    });
+
+    // Listen to changes in the "ReviewInbox" collection
+    const reviewInboxRef = collection(db, 'ReviewInbox');
+    const unsubscribeInbox = onSnapshot(reviewInboxRef, (snapshot) => {
+      const inboxData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTriageItems(inboxData.filter(item => item.status === 'PENDING'));
+    });
+
     // Cleanup subscription on unmount
     return () => {
       unsubscribeProps();
       unsubscribeUrls();
+      unsubscribeSources();
+      unsubscribeInbox();
     };
   }, [user]);
 
@@ -251,6 +280,65 @@ function App() {
       await signOut(auth);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleAddSource = async (e) => {
+    e.preventDefault();
+    setSourceMessage('');
+    try {
+      const normalizedSource = newSource.trim().replace(/\/$/, "");
+
+      if (discoverySources.some(s => s.source === normalizedSource)) {
+        setSourceMessage('Erro: Esta fonte já está cadastrada.');
+        return;
+      }
+
+      await addDoc(collection(db, 'DiscoverySources'), { source: normalizedSource, type: 'URL' });
+      setNewSource('');
+      setSourceMessage('Sucesso: Fonte adicionada com sucesso.');
+    } catch (error) {
+      console.error("Error adding source:", error);
+      setSourceMessage('Erro ao adicionar fonte.');
+    }
+  };
+
+  const handleDeleteSource = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'DiscoverySources', id));
+    } catch (error) {
+      console.error("Error deleting source:", error);
+    }
+  };
+
+  const handleTriageAction = async (item, action) => {
+    setTriageMessage('');
+    try {
+      const response = await fetch('https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/processTriageAction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id: item.id,
+          action: action,
+          type: item.type,
+          url: item.url,
+          new_hash: item.new_hash,
+          raw_text: item.raw_text,
+          image_base64: item.image_base64
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setTriageMessage(`Sucesso: Ação ${action} processada para ${item.url}`);
+    } catch (error) {
+      console.error("Error processing triage action:", error);
+      setTriageMessage(`Erro ao processar ação ${action}. Verifique o token.`);
     }
   };
 
@@ -367,6 +455,18 @@ function App() {
         >
           Mapa & Analytics
         </button>
+        <button
+          className={`tab-btn ${activeTab === 'discovery' ? 'active' : ''}`}
+          onClick={() => setActiveTab('discovery')}
+        >
+          Fontes de Descoberta
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'triage' ? 'active' : ''}`}
+          onClick={() => setActiveTab('triage')}
+        >
+          HITL Triage Center
+        </button>
       </div>
 
       {activeTab === 'ingestao' && (
@@ -423,6 +523,152 @@ function App() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'discovery' && (
+        <div className="card">
+          <h2>Fontes de Descoberta (Seed Domains)</h2>
+          <p>Adicione URLs base para o Spider explorar (ex: massai.com.br/empreendimentos). O AI irá varrer e enviar possíveis novos projetos para o Triage Center.</p>
+          <form onSubmit={handleAddSource} style={{ marginBottom: '2rem' }}>
+            <div className="form-group">
+              <label htmlFor="newSource">Adicionar Nova Fonte</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="url"
+                  id="newSource"
+                  placeholder="https://exemplo.com/imoveis"
+                  value={newSource}
+                  onChange={(e) => setNewSource(e.target.value)}
+                  required
+                  style={{ flexGrow: 1 }}
+                />
+                <button type="submit" className="submit-btn" style={{ marginTop: 0, width: 'auto' }}>Adicionar</button>
+              </div>
+            </div>
+            {sourceMessage && <div className={`message ${sourceMessage.includes('Erro') ? 'error' : 'success'}`}>{sourceMessage}</div>}
+          </form>
+
+          <div style={{ textAlign: 'left' }}>
+            <h3>Fontes Cadastradas</h3>
+            {discoverySources.length === 0 ? (
+              <p>Nenhuma fonte cadastrada.</p>
+            ) : (
+              <ul style={{ listStyleType: 'none', padding: 0 }}>
+                {discoverySources.map((source) => (
+                  <li key={source.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #ccc' }}>
+                    <span style={{ wordBreak: 'break-all', marginRight: '1rem' }}>{source.source}</span>
+                    <button
+                      onClick={() => handleDeleteSource(source.id)}
+                      style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Deletar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'triage' && (
+        <div className="card" style={{ width: '100%', maxWidth: '1000px' }}>
+          <h2>HITL Triage Center (Review Inbox)</h2>
+          <p>Revise novas descobertas e mudanças detectadas antes de processá-las.</p>
+
+          <div className="form-group" style={{ marginBottom: '2rem' }}>
+            <label htmlFor="triageToken">Token Bearer (Autorização para Ações)</label>
+            <input
+              type="password"
+              id="triageToken"
+              placeholder="Insira o token seguro"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+          </div>
+
+          {triageMessage && <div className={`message ${triageMessage.includes('Erro') ? 'error' : 'success'}`}>{triageMessage}</div>}
+
+          <div style={{ display: 'flex', gap: '2rem', marginTop: '2rem', flexDirection: 'column' }}>
+
+            {/* Queue A: Discoveries */}
+            <div style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px' }}>
+              <h3 style={{ color: '#2a5298', marginTop: 0 }}>Queue A: Novas Descobertas (Discovery)</h3>
+              {triageItems.filter(i => i.type === 'DISCOVERY').length === 0 ? (
+                <p>Nenhuma nova descoberta pendente.</p>
+              ) : (
+                <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
+                  {triageItems.filter(i => i.type === 'DISCOVERY').map((item) => (
+                    <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0', borderBottom: '1px solid #eee' }}>
+                      <div style={{ wordBreak: 'break-all', marginRight: '1rem', flexGrow: 1 }}>
+                        <a href={item.url} target="_blank" rel="noreferrer" style={{ fontWeight: 'bold' }}>{item.url}</a>
+                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}>
+                          Detectado em: {item.created_at?.toDate().toLocaleString() || 'N/A'}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          onClick={() => handleTriageAction(item, 'APPROVE')}
+                          style={{ backgroundColor: '#28a745', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          Aprovar (Deep Scan)
+                        </button>
+                        <button
+                          onClick={() => handleTriageAction(item, 'DISCARD')}
+                          style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          Descartar
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Queue B: Changes */}
+            <div style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px' }}>
+              <h3 style={{ color: '#d35400', marginTop: 0 }}>Queue B: Mudanças Detectadas (Temporal Memory)</h3>
+              {triageItems.filter(i => i.type === 'CHANGE').length === 0 ? (
+                <p>Nenhuma mudança pendente.</p>
+              ) : (
+                <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
+                  {triageItems.filter(i => i.type === 'CHANGE').map((item) => (
+                    <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '1rem 0', borderBottom: '1px solid #eee' }}>
+                      <div style={{ wordBreak: 'break-all', marginRight: '1rem', flexGrow: 1 }}>
+                        <a href={item.url} target="_blank" rel="noreferrer" style={{ fontWeight: 'bold' }}>{item.url}</a>
+                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}>
+                          Novo Hash: {item.new_hash?.substring(0, 8)}...<br/>
+                          Detectado em: {item.created_at?.toDate().toLocaleString() || 'N/A'}
+                        </div>
+                        {item.image_base64 && (
+                          <div style={{ marginTop: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8rem', backgroundColor: '#eee', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>Screenshot Anexada</span>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                         <button
+                          onClick={() => handleTriageAction(item, 'APPROVE')}
+                          style={{ backgroundColor: '#28a745', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          Aprovar (Atualizar Histórico)
+                        </button>
+                        <button
+                          onClick={() => handleTriageAction(item, 'DISCARD')}
+                          style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          Descartar (Falso Positivo)
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+          </div>
         </div>
       )}
 

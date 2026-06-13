@@ -1,6 +1,7 @@
 import os
 import requests
 import base64
+import hashlib
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -10,16 +11,17 @@ load_dotenv()
 
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData')
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
+GET_DISCOVERY_SOURCES_URL = os.environ.get('GET_DISCOVERY_SOURCES_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getDiscoverySources')
+REPORT_DETECTED_CHANGE_URL = os.environ.get('REPORT_DETECTED_CHANGE_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/reportDetectedChange')
 WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
 
 FILTER_URLS_URL = os.environ.get('FILTER_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/filterDiscoveredUrls')
 ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls')
-SEED_DOMAINS = [
-    'https://massai.com.br/empreendimentos'
-]
 
 
-def scrape_and_send(url, page):
+def scrape_and_send(target, page):
+    url = target.get('url')
+    last_content_hash = target.get('last_content_hash')
     print(f"Starting to scrape: {url}")
     try:
         # Navigate to URL and wait for JS to render
@@ -39,6 +41,16 @@ def scrape_and_send(url, page):
         else:
             raw_text = page.locator('body').inner_text()
 
+        # Compute SHA-256 hash of the cleaned text
+        new_hash = hashlib.sha256(raw_text.encode('utf-8')).hexdigest()
+
+        # Diffing Loop
+        if last_content_hash and last_content_hash == new_hash:
+            print(f"No Change detected for {url}. Hashes match ({new_hash}). Skipping extraction.")
+            return
+
+        print(f"Change detected for {url} or new URL. Generating payload...")
+
         payload = {
             "source": "python_playwright_scraper",
             "url": url,
@@ -46,24 +58,36 @@ def scrape_and_send(url, page):
         }
 
         # Multimodal Fallback: if text is too short, capture a screenshot
+        encoded_image = None
         if len(raw_text) < 500:
             print(f"Extracted text too short ({len(raw_text)} chars) for {url}. Capturing screenshot for multimodal fallback.")
             screenshot_bytes = page.screenshot(full_page=True)
             encoded_image = base64.b64encode(screenshot_bytes).decode('utf-8')
             payload["image_base64"] = encoded_image
 
-        # Prepare headers for Webhook
         webhook_headers = {
             'Authorization': f'Bearer {WEBHOOK_SECRET}',
             'Content-Type': 'application/json'
         }
 
-        # Send POST request to WEBHOOK_URL
-        print(f"Sending data to webhook for: {url}")
-        webhook_response = requests.post(WEBHOOK_URL, json=payload, headers=webhook_headers, timeout=15)
-        webhook_response.raise_for_status()
-
-        print(f"Success! Data sent for: {url}")
+        if last_content_hash is None:
+            # First time scraping, go directly to ingestPropertyData
+            print(f"Sending initial data to ingest webhook for: {url}")
+            webhook_response = requests.post(WEBHOOK_URL, json=payload, headers=webhook_headers, timeout=15)
+            webhook_response.raise_for_status()
+            print(f"Success! Initial data sent for: {url}")
+        else:
+            # Change detected on existing URL, send to reportDetectedChange
+            print(f"Sending changed data to review queue for: {url}")
+            change_payload = {
+                "url": url,
+                "new_hash": new_hash,
+                "raw_text": raw_text,
+                "image_base64": encoded_image
+            }
+            webhook_response = requests.post(REPORT_DETECTED_CHANGE_URL, json=change_payload, headers=webhook_headers, timeout=15)
+            webhook_response.raise_for_status()
+            print(f"Success! Change reported for: {url}")
 
     except PlaywrightTimeoutError:
         print(f"Timeout processing {url}")
@@ -80,9 +104,21 @@ def discovery_phase(page):
         'Content-Type': 'application/json'
     }
 
+    try:
+        print(f"Fetching dynamic discovery sources from: {GET_DISCOVERY_SOURCES_URL}")
+        response = requests.get(GET_DISCOVERY_SOURCES_URL, headers=auth_headers, timeout=15)
+        response.raise_for_status()
+        sources_data = response.json()
+        # Ensure we're extracting just the source string for crawling
+        seed_domains = [item.get('source') for item in sources_data if item.get('source') and item.get('type') == 'URL']
+        print(f"Retrieved {len(seed_domains)} discovery sources.")
+    except Exception as e:
+        print(f"Failed to retrieve discovery sources: {e}")
+        seed_domains = []
+
     all_filtered_urls = []
 
-    for seed_url in SEED_DOMAINS:
+    for seed_url in seed_domains:
         print(f"Crawling seed domain: {seed_url}")
         try:
             page.goto(seed_url, wait_until="networkidle", timeout=30000)
@@ -157,8 +193,7 @@ def main():
         try:
             response = requests.get(GET_TARGET_URLS_URL, headers=auth_headers, timeout=15)
             response.raise_for_status()
-            raw_target_urls = response.json()
-            target_urls = [url.strip().rstrip('/') for url in raw_target_urls]
+            target_urls = response.json()
             print(f"Retrieved {len(target_urls)} URLs to scrape.")
         except Exception as e:
             print(f"Failed to retrieve target URLs: {e}")
@@ -166,8 +201,8 @@ def main():
             browser.close()
             return
 
-        for url in target_urls:
-            scrape_and_send(url, page)
+        for target in target_urls:
+            scrape_and_send(target, page)
             print("-" * 40)
 
         context.close()

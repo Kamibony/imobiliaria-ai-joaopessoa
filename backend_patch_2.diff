@@ -1,0 +1,147 @@
+<<<<<<< SEARCH
+    const docRef = db.collection("properties").doc(propertyId);
+    const docSnap = await docRef.get();
+
+    if (docSnap.exists) {
+      const newSnapshots = propertyData.snapshots || [];
+      await docRef.update({
+        snapshots: admin.firestore.FieldValue.arrayUnion(...newSnapshots)
+      });
+      const { snapshots, ...otherData } = propertyData;
+      await docRef.set(otherData, { merge: true });
+    } else {
+      await docRef.set(propertyData);
+    }
+  } catch (error) {
+=======
+    const docRef = db.collection("properties").doc(propertyId);
+    const docSnap = await docRef.get();
+
+    if (docSnap.exists) {
+      const newSnapshots = propertyData.snapshots || [];
+      await docRef.update({
+        snapshots: admin.firestore.FieldValue.arrayUnion(...newSnapshots)
+      });
+      const { snapshots, ...otherData } = propertyData;
+      await docRef.set(otherData, { merge: true });
+    } else {
+      await docRef.set(propertyData);
+    }
+
+    // Also save hash back to TargetURLs if we have the original URL from payload
+    if (req.data.url && req.data.new_hash) {
+       const targetUrlsRef = db.collection("TargetURLs");
+       const targetQuery = await targetUrlsRef.where('url', '==', req.data.url).get();
+       if (!targetQuery.empty) {
+           targetQuery.forEach(async (doc) => {
+               await doc.ref.update({ last_content_hash: req.data.new_hash });
+           });
+       }
+    }
+  } catch (error) {
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+export const ingestPropertyData = onRequest(async (request, response) => {
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  const expectedSecret = process.env.WEBHOOK_SECRET;
+  if (!expectedSecret || token !== expectedSecret) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const payload = request.body;
+    let dataToParse = "";
+    let source = "admin_upload";
+
+    if (typeof payload === "string") {
+      dataToParse = payload;
+    } else if (typeof payload === "object") {
+      if (payload.raw_text) {
+        dataToParse = payload.raw_text;
+      } else {
+        dataToParse = JSON.stringify(payload);
+      }
+      if (payload.source) {
+        source = payload.source;
+      }
+    } else {
+      response.status(400).send("Invalid payload format. Expected string or JSON.");
+      return;
+    }
+
+
+
+    const queue = getFunctions().taskQueue('processPropertyData');
+
+    try {
+      await queue.enqueue({
+        dataToParse,
+        source,
+        image_base64: payload.image_base64
+      });
+    } catch (e) {
+      console.error("Failed to enqueue task", e);
+      throw e;
+    }response.status(202).send({ message: "Data received and queued for processing." });
+
+  } catch (error) {
+=======
+export const ingestPropertyData = onRequest(async (request, response) => {
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  const expectedSecret = process.env.WEBHOOK_SECRET;
+  if (!expectedSecret || token !== expectedSecret) {
+    response.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const payload = request.body;
+    let dataToParse = "";
+    let source = "admin_upload";
+
+    if (typeof payload === "string") {
+      dataToParse = payload;
+    } else if (typeof payload === "object") {
+      if (payload.raw_text) {
+        dataToParse = payload.raw_text;
+      } else {
+        dataToParse = JSON.stringify(payload);
+      }
+      if (payload.source) {
+        source = payload.source;
+      }
+    } else {
+      response.status(400).send("Invalid payload format. Expected string or JSON.");
+      return;
+    }
+
+
+
+    const queue = getFunctions().taskQueue('processPropertyData');
+
+    try {
+      await queue.enqueue({
+        dataToParse,
+        source,
+        url: payload.url,
+        new_hash: payload.new_hash,
+        image_base64: payload.image_base64
+      });
+    } catch (e) {
+      console.error("Failed to enqueue task", e);
+      throw e;
+    }response.status(202).send({ message: "Data received and queued for processing." });
+
+  } catch (error) {
+>>>>>>> REPLACE
