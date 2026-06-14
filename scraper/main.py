@@ -2,9 +2,16 @@ import os
 import requests
 import base64
 import hashlib
+import logging
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+# Configure Logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -13,16 +20,16 @@ WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
 GET_DISCOVERY_SOURCES_URL = os.environ.get('GET_DISCOVERY_SOURCES_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getDiscoverySources')
 REPORT_DETECTED_CHANGE_URL = os.environ.get('REPORT_DETECTED_CHANGE_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/reportDetectedChange')
-WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', os.environ.get('API_SECRET', ''))
+WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', os.environ.get('API_SECRET', 'dev_secret_fallback'))
 
 FILTER_URLS_URL = os.environ.get('FILTER_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/filterDiscoveredUrls')
 ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls')
 
 
-def scrape_and_send(target, page):
+def scrape_and_send(target: dict, page: Page, session: requests.Session):
     url = target.get('url')
     last_content_hash = target.get('last_content_hash')
-    print(f"Starting to scrape: {url}")
+    logger.info(f"Starting to scrape: {url}")
     try:
         # Navigate to URL and wait for JS to render
         page.goto(url, wait_until="networkidle", timeout=30000)
@@ -46,10 +53,10 @@ def scrape_and_send(target, page):
 
         # Diffing Loop
         if last_content_hash and last_content_hash == new_hash:
-            print(f"No Change detected for {url}. Hashes match ({new_hash}). Skipping extraction.")
+            logger.info(f"No Change detected for {url}. Hashes match ({new_hash}). Skipping extraction.")
             return
 
-        print(f"Change detected for {url} or new URL. Generating payload...")
+        logger.info(f"Change detected for {url} or new URL. Generating payload...")
 
         payload = {
             "source": "python_playwright_scraper",
@@ -60,7 +67,7 @@ def scrape_and_send(target, page):
         # Multimodal Fallback: if text is too short, capture a screenshot
         encoded_image = None
         if len(raw_text) < 500:
-            print(f"Extracted text too short ({len(raw_text)} chars) for {url}. Capturing screenshot for multimodal fallback.")
+            logger.warning(f"Extracted text too short ({len(raw_text)} chars) for {url}. Capturing screenshot for multimodal fallback.")
             screenshot_bytes = page.screenshot(full_page=True)
             encoded_image = base64.b64encode(screenshot_bytes).decode('utf-8')
             payload["image_base64"] = encoded_image
@@ -72,54 +79,54 @@ def scrape_and_send(target, page):
 
         if last_content_hash is None:
             # First time scraping, go directly to ingestPropertyData
-            print(f"Sending initial data to ingest webhook for: {url}")
-            webhook_response = requests.post(WEBHOOK_URL, json=payload, headers=webhook_headers, timeout=15)
+            logger.info(f"Sending initial data to ingest webhook for: {url}")
+            webhook_response = session.post(WEBHOOK_URL, json=payload, headers=webhook_headers, timeout=130)
             webhook_response.raise_for_status()
-            print(f"Success! Initial data sent for: {url}")
+            logger.info(f"Success! Initial data sent for: {url}")
         else:
             # Change detected on existing URL, send to reportDetectedChange
-            print(f"Sending changed data to review queue for: {url}")
+            logger.info(f"Sending changed data to review queue for: {url}")
             change_payload = {
                 "url": url,
                 "new_hash": new_hash,
                 "raw_text": raw_text,
                 "image_base64": encoded_image
             }
-            webhook_response = requests.post(REPORT_DETECTED_CHANGE_URL, json=change_payload, headers=webhook_headers, timeout=15)
+            webhook_response = session.post(REPORT_DETECTED_CHANGE_URL, json=change_payload, headers=webhook_headers, timeout=130)
             webhook_response.raise_for_status()
-            print(f"Success! Change reported for: {url}")
+            logger.info(f"Success! Change reported for: {url}")
 
     except PlaywrightTimeoutError:
-        print(f"Timeout processing {url}")
+        logger.warning(f"Timeout processing {url}")
     except requests.exceptions.RequestException as e:
-        print(f"Webhook failure processing {url}: {e}")
+        logger.error(f"Webhook failure processing {url}: {e}")
     except Exception as e:
-        print(f"An unexpected error occurred for {url}: {e}")
+        logger.error(f"An unexpected error occurred for {url}: {e}")
 
 
-def discovery_phase(page):
-    print("Starting AI-Driven Discovery Phase...")
+def discovery_phase(page: Page, session: requests.Session):
+    logger.info("Starting AI-Driven Discovery Phase...")
     auth_headers = {
         'Authorization': f'Bearer {WEBHOOK_SECRET}',
         'Content-Type': 'application/json'
     }
 
     try:
-        print(f"Fetching dynamic discovery sources from: {GET_DISCOVERY_SOURCES_URL}")
-        response = requests.get(GET_DISCOVERY_SOURCES_URL, headers=auth_headers, timeout=15)
+        logger.info(f"Fetching dynamic discovery sources from: {GET_DISCOVERY_SOURCES_URL}")
+        response = session.get(GET_DISCOVERY_SOURCES_URL, headers=auth_headers, timeout=30)
         response.raise_for_status()
         sources_data = response.json()
         # Ensure we're extracting just the source string for crawling
         seed_domains = [item.get('source') for item in sources_data if item.get('source') and item.get('type') == 'URL']
-        print(f"Retrieved {len(seed_domains)} discovery sources.")
+        logger.info(f"Retrieved {len(seed_domains)} discovery sources.")
     except Exception as e:
-        print(f"Failed to retrieve discovery sources: {e}")
+        logger.error(f"Failed to retrieve discovery sources: {e}")
         seed_domains = []
 
     all_filtered_urls = []
 
     for seed_url in seed_domains:
-        print(f"Crawling seed domain: {seed_url}")
+        logger.info(f"Crawling seed domain: {seed_url}")
         try:
             page.goto(seed_url, wait_until="networkidle", timeout=30000)
 
@@ -133,45 +140,52 @@ def discovery_phase(page):
             }''')
 
             if not links:
-                print(f"No links found on {seed_url}")
+                logger.warning(f"No links found on {seed_url}")
                 continue
 
-            print(f"Found {len(links)} links on {seed_url}. Sending to AI for filtering...")
+            logger.info(f"Found {len(links)} links on {seed_url}. Sending to AI for filtering...")
 
             # Send to filter endpoint (using 120s timeout as Gemini can be slow)
-            response = requests.post(FILTER_URLS_URL, json=links, headers=auth_headers, timeout=130)
+            response = session.post(FILTER_URLS_URL, json=links, headers=auth_headers, timeout=130)
             response.raise_for_status()
 
             filtered_urls = response.json()
-            print(f"AI identified {len(filtered_urls)} relevant URLs from {seed_url}")
+            logger.info(f"AI identified {len(filtered_urls)} relevant URLs from {seed_url}")
             all_filtered_urls.extend(filtered_urls)
 
         except PlaywrightTimeoutError:
-            print(f"Timeout crawling seed domain {seed_url}")
+            logger.warning(f"Timeout crawling seed domain {seed_url}")
         except requests.exceptions.RequestException as e:
-            print(f"Error filtering links from {seed_url}: {e}")
+            logger.error(f"Error filtering links from {seed_url}: {e}")
         except Exception as e:
-            print(f"An unexpected error occurred during discovery on {seed_url}: {e}")
+            logger.error(f"An unexpected error occurred during discovery on {seed_url}: {e}")
 
     if all_filtered_urls:
         normalized_filtered_urls = [url.strip().rstrip('/') for url in all_filtered_urls]
-        print(f"Total AI-discovered URLs: {len(normalized_filtered_urls)}. Pushing to backend...")
+        logger.info(f"Total AI-discovered URLs: {len(normalized_filtered_urls)}. Pushing to backend...")
         try:
-            add_response = requests.post(ADD_DISCOVERED_URLS_URL, json=normalized_filtered_urls, headers=auth_headers, timeout=30)
+            add_response = session.post(ADD_DISCOVERED_URLS_URL, json=normalized_filtered_urls, headers=auth_headers, timeout=30)
             add_response.raise_for_status()
             result = add_response.json()
-            print(f"Successfully pushed discovered URLs: {result.get('message')}")
+            logger.info(f"Successfully pushed discovered URLs: {result.get('message')}")
         except requests.exceptions.RequestException as e:
-            print(f"Error adding discovered URLs to backend: {e}")
+            logger.error(f"Error adding discovered URLs to backend: {e}")
         except Exception as e:
-            print(f"An unexpected error occurred pushing discovered URLs: {e}")
+            logger.error(f"An unexpected error occurred pushing discovered URLs: {e}")
     else:
-        print("No relevant URLs discovered in this run.")
+        logger.info("No relevant URLs discovered in this run.")
 
 
 def main():
-    if not WEBHOOK_SECRET:
-        print("Warning: WEBHOOK_SECRET is not set. The webhook request might fail due to lack of authorization.")
+    if WEBHOOK_SECRET == 'dev_secret_fallback':
+        logger.warning("Warning: Using the dev fallback secret for authorization. Do not use in production.")
+
+    # Configure requests session with retry logic
+    session = requests.Session()
+    retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -182,28 +196,28 @@ def main():
 
 
         # Run the discovery phase before ingestion
-        discovery_phase(page)
+        discovery_phase(page, session)
 
-        print(f"Fetching dynamic target URLs from: {GET_TARGET_URLS_URL}")
+        logger.info(f"Fetching dynamic target URLs from: {GET_TARGET_URLS_URL}")
 
         auth_headers = {
             'Authorization': f'Bearer {WEBHOOK_SECRET}'
         }
 
         try:
-            response = requests.get(GET_TARGET_URLS_URL, headers=auth_headers, timeout=15)
+            response = session.get(GET_TARGET_URLS_URL, headers=auth_headers, timeout=30)
             response.raise_for_status()
             target_urls = response.json()
-            print(f"Retrieved {len(target_urls)} URLs to scrape.")
+            logger.info(f"Retrieved {len(target_urls)} URLs to scrape.")
         except Exception as e:
-            print(f"Failed to retrieve target URLs: {e}")
+            logger.error(f"Failed to retrieve target URLs: {e}")
             context.close()
             browser.close()
             return
 
         for target in target_urls:
-            scrape_and_send(target, page)
-            print("-" * 40)
+            scrape_and_send(target, page, session)
+            logger.info("-" * 40)
 
         context.close()
         browser.close()
