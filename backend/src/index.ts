@@ -17,11 +17,15 @@ async function verifyAuth(request: any): Promise<boolean> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return false;
   }
-  const token = authHeader.split("Bearer ")[1];
+  const token = authHeader.split("Bearer ")[1].trim();
   const isDevEnv = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
   const expectedSecret = process.env.WEBHOOK_SECRET || process.env.API_SECRET || (isDevEnv ? 'dev_secret_fallback' : undefined);
 
-  if (expectedSecret && token === expectedSecret) {
+  if (!isDevEnv && !process.env.WEBHOOK_SECRET && !process.env.API_SECRET) {
+      console.error("DIAGNOSTIC: API_SECRET and WEBHOOK_SECRET are undefined in production environment.");
+  }
+
+  if (expectedSecret && token === expectedSecret.trim()) {
     return true;
   }
 

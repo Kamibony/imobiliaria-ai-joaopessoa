@@ -20,7 +20,7 @@ WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
 GET_DISCOVERY_SOURCES_URL = os.environ.get('GET_DISCOVERY_SOURCES_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getDiscoverySources')
 REPORT_DETECTED_CHANGE_URL = os.environ.get('REPORT_DETECTED_CHANGE_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/reportDetectedChange')
-WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', os.environ.get('API_SECRET', 'dev_secret_fallback'))
+WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', os.environ.get('API_SECRET', 'dev_secret_fallback')).strip()
 
 FILTER_URLS_URL = os.environ.get('FILTER_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/filterDiscoveredUrls')
 ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls')
@@ -72,15 +72,10 @@ def scrape_and_send(target: dict, page: Page, session: requests.Session):
             encoded_image = base64.b64encode(screenshot_bytes).decode('utf-8')
             payload["image_base64"] = encoded_image
 
-        webhook_headers = {
-            'Authorization': f'Bearer {WEBHOOK_SECRET}',
-            'Content-Type': 'application/json'
-        }
-
         if last_content_hash is None:
             # First time scraping, go directly to ingestPropertyData
             logger.info(f"Sending initial data to ingest webhook for: {url}")
-            webhook_response = session.post(WEBHOOK_URL, json=payload, headers=webhook_headers, timeout=130)
+            webhook_response = session.post(WEBHOOK_URL, json=payload, timeout=130)
             webhook_response.raise_for_status()
             logger.info(f"Success! Initial data sent for: {url}")
         else:
@@ -92,7 +87,7 @@ def scrape_and_send(target: dict, page: Page, session: requests.Session):
                 "raw_text": raw_text,
                 "image_base64": encoded_image
             }
-            webhook_response = session.post(REPORT_DETECTED_CHANGE_URL, json=change_payload, headers=webhook_headers, timeout=130)
+            webhook_response = session.post(REPORT_DETECTED_CHANGE_URL, json=change_payload, timeout=130)
             webhook_response.raise_for_status()
             logger.info(f"Success! Change reported for: {url}")
 
@@ -106,14 +101,10 @@ def scrape_and_send(target: dict, page: Page, session: requests.Session):
 
 def discovery_phase(page: Page, session: requests.Session):
     logger.info("Starting AI-Driven Discovery Phase...")
-    auth_headers = {
-        'Authorization': f'Bearer {WEBHOOK_SECRET}',
-        'Content-Type': 'application/json'
-    }
 
     try:
         logger.info(f"Fetching dynamic discovery sources from: {GET_DISCOVERY_SOURCES_URL}")
-        response = session.get(GET_DISCOVERY_SOURCES_URL, headers=auth_headers, timeout=30)
+        response = session.get(GET_DISCOVERY_SOURCES_URL, timeout=30)
         response.raise_for_status()
         sources_data = response.json()
         # Ensure we're extracting just the source string for crawling
@@ -146,7 +137,7 @@ def discovery_phase(page: Page, session: requests.Session):
             logger.info(f"Found {len(links)} links on {seed_url}. Sending to AI for filtering...")
 
             # Send to filter endpoint (using 120s timeout as Gemini can be slow)
-            response = session.post(FILTER_URLS_URL, json=links, headers=auth_headers, timeout=130)
+            response = session.post(FILTER_URLS_URL, json=links, timeout=130)
             response.raise_for_status()
 
             filtered_urls = response.json()
@@ -164,7 +155,7 @@ def discovery_phase(page: Page, session: requests.Session):
         normalized_filtered_urls = [url.strip().rstrip('/') for url in all_filtered_urls]
         logger.info(f"Total AI-discovered URLs: {len(normalized_filtered_urls)}. Pushing to backend...")
         try:
-            add_response = session.post(ADD_DISCOVERED_URLS_URL, json=normalized_filtered_urls, headers=auth_headers, timeout=30)
+            add_response = session.post(ADD_DISCOVERED_URLS_URL, json=normalized_filtered_urls, timeout=30)
             add_response.raise_for_status()
             result = add_response.json()
             logger.info(f"Successfully pushed discovered URLs: {result.get('message')}")
@@ -182,6 +173,11 @@ def main():
 
     # Configure requests session with retry logic
     session = requests.Session()
+    session.headers.update({
+        'Authorization': f'Bearer {WEBHOOK_SECRET}',
+        'Content-Type': 'application/json'
+    })
+
     retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
     adapter = HTTPAdapter(max_retries=retries)
     session.mount('http://', adapter)
@@ -200,12 +196,8 @@ def main():
 
         logger.info(f"Fetching dynamic target URLs from: {GET_TARGET_URLS_URL}")
 
-        auth_headers = {
-            'Authorization': f'Bearer {WEBHOOK_SECRET}'
-        }
-
         try:
-            response = session.get(GET_TARGET_URLS_URL, headers=auth_headers, timeout=30)
+            response = session.get(GET_TARGET_URLS_URL, timeout=30)
             response.raise_for_status()
             target_urls = response.json()
             logger.info(f"Retrieved {len(target_urls)} URLs to scrape.")
