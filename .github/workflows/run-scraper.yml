@@ -37,3 +37,4 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          API_SECRET: ${{ secrets.API_SECRET }}
