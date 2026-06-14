@@ -12,6 +12,27 @@ admin.initializeApp();
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 
+async function verifyAuth(request: any): Promise<boolean> {
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return false;
+  }
+  const token = authHeader.split("Bearer ")[1];
+  const expectedSecret = process.env.WEBHOOK_SECRET || process.env.API_SECRET;
+
+  if (expectedSecret && token === expectedSecret) {
+    return true;
+  }
+
+  try {
+    await admin.auth().verifyIdToken(token);
+    return true;
+  } catch (error) {
+    console.error("Firebase auth verification failed:", error);
+    return false;
+  }
+}
+
 // Initialize Vertex AI
 let project = 'imobiliaria-ai-joaopessoa';
 if (process.env.GCLOUD_PROJECT) {
@@ -226,14 +247,7 @@ export const processPropertyData = onTaskDispatched({
 
 export const ingestPropertyData = onRequest((request, response) => {
   corsHandler(request, response, async () => {
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!expectedSecret || token !== expectedSecret) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
@@ -287,15 +301,7 @@ export const ingestPropertyData = onRequest((request, response) => {
 // HTTP Cloud Function to filter discovered URLs using Gemini
 export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, (request, response) => {
   corsHandler(request, response, async () => {
-  // Require Bearer token in authorization header
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
@@ -377,14 +383,7 @@ export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, (request,
 
 export const dispatchScrapingMission = onRequest((request, response) => {
   corsHandler(request, response, async () => {
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
@@ -426,15 +425,7 @@ export const dispatchScrapingMission = onRequest((request, response) => {
 
 export const addDiscoveredUrls = onRequest((request, response) => {
   corsHandler(request, response, async () => {
-  // Require Bearer token in authorization header
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
@@ -518,15 +509,7 @@ export const addDiscoveredUrls = onRequest((request, response) => {
 // HTTP Cloud Function to get dynamic target URLs for the scraper
 export const getDiscoverySources = onRequest((request, response) => {
   corsHandler(request, response, async () => {
-  // Require Bearer token in authorization header
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
@@ -557,14 +540,7 @@ export const getDiscoverySources = onRequest((request, response) => {
 
 export const processTriageAction = onRequest((request, response) => {
   corsHandler(request, response, async () => {
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
@@ -669,15 +645,7 @@ export const processTriageAction = onRequest((request, response) => {
 
 export const reportDetectedChange = onRequest((request, response) => {
   corsHandler(request, response, async () => {
-  // Require Bearer token in authorization header
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
@@ -726,15 +694,7 @@ export const reportDetectedChange = onRequest((request, response) => {
 
 export const getTargetUrls = onRequest((request, response) => {
   corsHandler(request, response, async () => {
-  // Require Bearer token in authorization header (same logic as ingestPropertyData)
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    response.status(401).send("Unauthorized");
-    return;
-  }
-  const token = authHeader.split("Bearer ")[1];
-  const expectedSecret = process.env.WEBHOOK_SECRET;
-  if (!token || (expectedSecret && token !== expectedSecret)) {
+  if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
     return;
   }
