@@ -13,7 +13,7 @@ WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://us-central1-imobiliaria-ai-
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls')
 GET_DISCOVERY_SOURCES_URL = os.environ.get('GET_DISCOVERY_SOURCES_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getDiscoverySources')
 REPORT_DETECTED_CHANGE_URL = os.environ.get('REPORT_DETECTED_CHANGE_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/reportDetectedChange')
-WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
+WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', os.environ.get('API_SECRET', ''))
 
 FILTER_URLS_URL = os.environ.get('FILTER_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/filterDiscoveredUrls')
 ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL', 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls')
