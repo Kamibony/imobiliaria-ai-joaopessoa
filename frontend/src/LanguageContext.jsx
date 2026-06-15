@@ -17,3 +17,16 @@ export const LanguageProvider = ({ children }) => {
 };
 
 export const useLanguage = () => useContext(LanguageContext);
+
+export const getLocalizedText = (val, currentLang) => {
+  if (val === null || val === undefined) return val;
+  if (typeof val !== 'object' || Array.isArray(val)) return val;
+
+  if (val[currentLang] !== undefined) return val[currentLang];
+  if (val['pt-BR'] !== undefined) return val['pt-BR'];
+
+  const keys = Object.keys(val);
+  if (keys.length > 0) return val[keys[0]];
+
+  return ''; // Safe fallback to avoid returning raw objects to DOM
+};
