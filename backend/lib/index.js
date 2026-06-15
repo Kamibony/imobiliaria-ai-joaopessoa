@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.whatsappWebhook = exports.getTargetUrls = exports.reportDetectedChange = exports.processTriageAction = exports.getDiscoverySources = exports.addDiscoveredUrls = exports.dispatchScrapingMission = exports.filterDiscoveredUrls = exports.ingestPropertyData = exports.processPropertyData = void 0;
+const params_1 = require("firebase-functions/params");
 const https_1 = require("firebase-functions/v2/https");
 const tasks_1 = require("firebase-functions/v2/tasks");
 const admin = __importStar(require("firebase-admin"));
@@ -43,10 +44,7 @@ const schema_1 = require("./schema");
 const utils_1 = require("./utils");
 const cors = require("cors");
 admin.initializeApp();
-const isDevEnvTopLevel = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-if (!isDevEnvTopLevel && !process.env.WEBHOOK_SECRET && !process.env.API_SECRET) {
-    throw new Error("CRITICAL: API_SECRET and WEBHOOK_SECRET are missing in production environment. Halting deployment.");
-}
+const apiSecret = (0, params_1.defineSecret)("API_SECRET");
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 async function verifyAuth(request) {
@@ -56,8 +54,8 @@ async function verifyAuth(request) {
     }
     const token = authHeader.split("Bearer ")[1].trim();
     const isDevEnv = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-    const expectedSecret = process.env.WEBHOOK_SECRET || process.env.API_SECRET || (isDevEnv ? 'dev_secret_fallback' : undefined);
-    if (!isDevEnv && !process.env.WEBHOOK_SECRET && !process.env.API_SECRET) {
+    const expectedSecret = process.env.WEBHOOK_SECRET || apiSecret.value() || (isDevEnv ? 'dev_secret_fallback' : undefined);
+    if (!isDevEnv && !process.env.WEBHOOK_SECRET && !apiSecret.value()) {
         console.error("DIAGNOSTIC: API_SECRET and WEBHOOK_SECRET are undefined in production environment.");
     }
     if (expectedSecret && token === expectedSecret.trim()) {
@@ -270,7 +268,7 @@ exports.processPropertyData = (0, tasks_1.onTaskDispatched)({
         throw error; // Will retry via Cloud Tasks
     }
 });
-exports.ingestPropertyData = (0, https_1.onRequest)((request, response) => {
+exports.ingestPropertyData = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -321,7 +319,7 @@ exports.ingestPropertyData = (0, https_1.onRequest)((request, response) => {
     });
 });
 // HTTP Cloud Function to filter discovered URLs using Gemini
-exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120 }, (request, response) => {
+exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120, secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -392,7 +390,7 @@ exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120 }, (
         }
     });
 });
-exports.dispatchScrapingMission = (0, https_1.onRequest)((request, response) => {
+exports.dispatchScrapingMission = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -428,7 +426,7 @@ exports.dispatchScrapingMission = (0, https_1.onRequest)((request, response) => 
         }
     });
 });
-exports.addDiscoveredUrls = (0, https_1.onRequest)((request, response) => {
+exports.addDiscoveredUrls = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -499,7 +497,7 @@ exports.addDiscoveredUrls = (0, https_1.onRequest)((request, response) => {
     });
 });
 // HTTP Cloud Function to get dynamic target URLs for the scraper
-exports.getDiscoverySources = (0, https_1.onRequest)((request, response) => {
+exports.getDiscoverySources = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -527,7 +525,7 @@ exports.getDiscoverySources = (0, https_1.onRequest)((request, response) => {
         }
     });
 });
-exports.processTriageAction = (0, https_1.onRequest)((request, response) => {
+exports.processTriageAction = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -622,7 +620,7 @@ exports.processTriageAction = (0, https_1.onRequest)((request, response) => {
         }
     });
 });
-exports.reportDetectedChange = (0, https_1.onRequest)((request, response) => {
+exports.reportDetectedChange = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -665,7 +663,7 @@ exports.reportDetectedChange = (0, https_1.onRequest)((request, response) => {
         }
     });
 });
-exports.getTargetUrls = (0, https_1.onRequest)((request, response) => {
+exports.getTargetUrls = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (!(await verifyAuth(request))) {
             response.status(401).send("Unauthorized");
@@ -693,7 +691,7 @@ exports.getTargetUrls = (0, https_1.onRequest)((request, response) => {
     });
 });
 // WhatsApp Webhook
-exports.whatsappWebhook = (0, https_1.onRequest)((request, response) => {
+exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (request.method === 'GET') {
             // WhatsApp Verification

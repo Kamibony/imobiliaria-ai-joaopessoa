@@ -55,10 +55,6 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Configure backend environment secrets
-        run: |
-          echo "API_SECRET=${{ secrets.API_SECRET }}" >> backend/.env
-
       - name: Deploy to Firebase Functions, Hosting, and Firestore
         run: firebase deploy --only functions,hosting,firestore --project imobiliaria-ai-joaopessoa --force
         env:
