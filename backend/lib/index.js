@@ -43,6 +43,10 @@ const schema_1 = require("./schema");
 const utils_1 = require("./utils");
 const cors = require("cors");
 admin.initializeApp();
+const isDevEnvTopLevel = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+if (!isDevEnvTopLevel && !process.env.WEBHOOK_SECRET && !process.env.API_SECRET) {
+    throw new Error("CRITICAL: API_SECRET and WEBHOOK_SECRET are missing in production environment. Halting deployment.");
+}
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 async function verifyAuth(request) {
