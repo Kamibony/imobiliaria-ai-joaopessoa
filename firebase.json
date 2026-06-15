@@ -28,6 +28,30 @@
     ],
     "rewrites": [
       {
+        "source": "/api/ingestPropertyData",
+        "function": "ingestPropertyData"
+      },
+      {
+        "source": "/api/getTargetUrls",
+        "function": "getTargetUrls"
+      },
+      {
+        "source": "/api/getDiscoverySources",
+        "function": "getDiscoverySources"
+      },
+      {
+        "source": "/api/reportDetectedChange",
+        "function": "reportDetectedChange"
+      },
+      {
+        "source": "/api/filterDiscoveredUrls",
+        "function": "filterDiscoveredUrls"
+      },
+      {
+        "source": "/api/addDiscoveredUrls",
+        "function": "addDiscoveredUrls"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

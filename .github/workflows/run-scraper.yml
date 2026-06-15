@@ -35,6 +35,6 @@ jobs:
           cd scraper
           python main.py
         env:
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           API_SECRET: ${{ secrets.API_SECRET }}

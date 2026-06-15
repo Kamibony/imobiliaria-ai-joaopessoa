@@ -16,18 +16,23 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-WEBHOOK_URL = os.environ.get('WEBHOOK_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData'
-GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls'
-GET_DISCOVERY_SOURCES_URL = os.environ.get('GET_DISCOVERY_SOURCES_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getDiscoverySources'
-REPORT_DETECTED_CHANGE_URL = os.environ.get('REPORT_DETECTED_CHANGE_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/reportDetectedChange'
+API_BASE_URL = os.environ.get('API_BASE_URL')
+if not API_BASE_URL:
+    raise ValueError("CRITICAL ERROR: API_BASE_URL is missing or empty. Please provide the Firebase Hosting base URL for the API Gateway.")
+API_BASE_URL = API_BASE_URL.rstrip('/')
+
+WEBHOOK_URL = f"{API_BASE_URL}/api/ingestPropertyData"
+GET_TARGET_URLS_URL = f"{API_BASE_URL}/api/getTargetUrls"
+GET_DISCOVERY_SOURCES_URL = f"{API_BASE_URL}/api/getDiscoverySources"
+REPORT_DETECTED_CHANGE_URL = f"{API_BASE_URL}/api/reportDetectedChange"
+FILTER_URLS_URL = f"{API_BASE_URL}/api/filterDiscoveredUrls"
+ADD_DISCOVERED_URLS_URL = f"{API_BASE_URL}/api/addDiscoveredUrls"
+
 WEBHOOK_SECRET = (os.environ.get('WEBHOOK_SECRET') or os.environ.get('API_SECRET') or '').strip()
 IS_LOCAL = os.environ.get('GITHUB_ACTIONS') != 'true' and os.environ.get('ENVIRONMENT') != 'production'
 
 if not WEBHOOK_SECRET and IS_LOCAL:
     WEBHOOK_SECRET = 'dev_secret_fallback'
-
-FILTER_URLS_URL = os.environ.get('FILTER_URLS_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/filterDiscoveredUrls'
-ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls'
 
 
 def scrape_and_send(target: dict, page: Page, session: requests.Session):
