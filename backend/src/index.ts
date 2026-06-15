@@ -1,3 +1,4 @@
+import { defineSecret } from "firebase-functions/params";
 import { onRequest } from "firebase-functions/v2/https";
 import { onTaskDispatched } from "firebase-functions/v2/tasks";
 import * as admin from "firebase-admin";
@@ -9,10 +10,7 @@ import cors = require("cors");
 
 admin.initializeApp();
 
-const isDevEnvTopLevel = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-if (!isDevEnvTopLevel && !process.env.WEBHOOK_SECRET && !process.env.API_SECRET) {
-    throw new Error("CRITICAL: API_SECRET and WEBHOOK_SECRET are missing in production environment. Halting deployment.");
-}
+const apiSecret = defineSecret("API_SECRET");
 
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
@@ -24,9 +22,9 @@ async function verifyAuth(request: any): Promise<boolean> {
   }
   const token = authHeader.split("Bearer ")[1].trim();
   const isDevEnv = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-  const expectedSecret = process.env.WEBHOOK_SECRET || process.env.API_SECRET || (isDevEnv ? 'dev_secret_fallback' : undefined);
+  const expectedSecret = process.env.WEBHOOK_SECRET || apiSecret.value() || (isDevEnv ? 'dev_secret_fallback' : undefined);
 
-  if (!isDevEnv && !process.env.WEBHOOK_SECRET && !process.env.API_SECRET) {
+  if (!isDevEnv && !process.env.WEBHOOK_SECRET && !apiSecret.value()) {
       console.error("DIAGNOSTIC: API_SECRET and WEBHOOK_SECRET are undefined in production environment.");
   }
 
@@ -255,7 +253,7 @@ export const processPropertyData = onTaskDispatched({
 });
 
 
-export const ingestPropertyData = onRequest((request, response) => {
+export const ingestPropertyData = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -309,7 +307,7 @@ export const ingestPropertyData = onRequest((request, response) => {
 
 
 // HTTP Cloud Function to filter discovered URLs using Gemini
-export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, (request, response) => {
+export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120, secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -391,7 +389,7 @@ export const filterDiscoveredUrls = onRequest({ timeoutSeconds: 120 }, (request,
   });
 });
 
-export const dispatchScrapingMission = onRequest((request, response) => {
+export const dispatchScrapingMission = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -433,7 +431,7 @@ export const dispatchScrapingMission = onRequest((request, response) => {
   });
 });
 
-export const addDiscoveredUrls = onRequest((request, response) => {
+export const addDiscoveredUrls = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -517,7 +515,7 @@ export const addDiscoveredUrls = onRequest((request, response) => {
 });
 
 // HTTP Cloud Function to get dynamic target URLs for the scraper
-export const getDiscoverySources = onRequest((request, response) => {
+export const getDiscoverySources = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -548,7 +546,7 @@ export const getDiscoverySources = onRequest((request, response) => {
   });
 });
 
-export const processTriageAction = onRequest((request, response) => {
+export const processTriageAction = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -653,7 +651,7 @@ export const processTriageAction = onRequest((request, response) => {
   });
 });
 
-export const reportDetectedChange = onRequest((request, response) => {
+export const reportDetectedChange = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -702,7 +700,7 @@ export const reportDetectedChange = onRequest((request, response) => {
   });
 });
 
-export const getTargetUrls = onRequest((request, response) => {
+export const getTargetUrls = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (!(await verifyAuth(request))) {
     response.status(401).send("Unauthorized");
@@ -734,7 +732,7 @@ export const getTargetUrls = onRequest((request, response) => {
 
 
 // WhatsApp Webhook
-export const whatsappWebhook = onRequest((request, response) => {
+export const whatsappWebhook = onRequest({ secrets: [apiSecret] }, (request, response) => {
   corsHandler(request, response, async () => {
   if (request.method === 'GET') {
     // WhatsApp Verification
