@@ -20,7 +20,11 @@ WEBHOOK_URL = os.environ.get('WEBHOOK_URL') or 'https://us-central1-imobiliaria-
 GET_TARGET_URLS_URL = os.environ.get('GET_TARGET_URLS_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getTargetUrls'
 GET_DISCOVERY_SOURCES_URL = os.environ.get('GET_DISCOVERY_SOURCES_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/getDiscoverySources'
 REPORT_DETECTED_CHANGE_URL = os.environ.get('REPORT_DETECTED_CHANGE_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/reportDetectedChange'
-WEBHOOK_SECRET = (os.environ.get('WEBHOOK_SECRET') or os.environ.get('API_SECRET') or 'dev_secret_fallback').strip()
+WEBHOOK_SECRET = (os.environ.get('WEBHOOK_SECRET') or os.environ.get('API_SECRET') or '').strip()
+IS_LOCAL = os.environ.get('GITHUB_ACTIONS') != 'true' and os.environ.get('ENVIRONMENT') != 'production'
+
+if not WEBHOOK_SECRET and IS_LOCAL:
+    WEBHOOK_SECRET = 'dev_secret_fallback'
 
 FILTER_URLS_URL = os.environ.get('FILTER_URLS_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/filterDiscoveredUrls'
 ADD_DISCOVERED_URLS_URL = os.environ.get('ADD_DISCOVERED_URLS_URL') or 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/addDiscoveredUrls'
@@ -168,7 +172,15 @@ def discovery_phase(page: Page, session: requests.Session):
 
 
 def main():
+    logger.info(f"Diagnostic - Secret length: {len(WEBHOOK_SECRET)}")
+    logger.info(f"Diagnostic - Is fallback: {WEBHOOK_SECRET == 'dev_secret_fallback'}")
+
+    if not WEBHOOK_SECRET:
+        raise ValueError("CRITICAL ERROR: API_SECRET or WEBHOOK_SECRET is missing or empty.")
+
     if WEBHOOK_SECRET == 'dev_secret_fallback':
+        if not IS_LOCAL:
+            raise ValueError("CRITICAL ERROR: Using dev_secret_fallback is strictly prohibited in non-local environments.")
         logger.warning("Warning: Using the dev fallback secret for authorization. Do not use in production.")
 
     # Configure requests session with retry logic
