@@ -1,5 +1,5 @@
 import ErrorBoundary from './ErrorBoundary';
-import { LanguageProvider, useLanguage } from './LanguageContext';
+import { LanguageProvider, useLanguage, getLocalizedText } from './LanguageContext';
 import { useState, useEffect, useMemo } from 'react'
 import { collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
@@ -11,18 +11,22 @@ import { db, auth } from './firebase'
 import './App.css'
 
 const PropertyCard = ({ property, latestSnapshot }) => {
+  const { language } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const aiContext = property.ai_context;
 
+  const targetPersonaRaw = aiContext ? getLocalizedText(aiContext.target_persona, language) : null;
+  const targetPersona = Array.isArray(targetPersonaRaw) ? targetPersonaRaw : (typeof targetPersonaRaw === 'string' ? [targetPersonaRaw] : []);
+
   return (
     <div className="property-card">
-      <h3>{property.basic_info?.title || 'Sem Título'}</h3>
-      <p><strong>Construtora:</strong> {property.basic_info?.developer || 'N/A'}</p>
-      <p><strong>Bairro:</strong> {property.location?.neighborhood || 'N/A'}</p>
+      <h3>{getLocalizedText(property.basic_info?.title, language) || 'Sem Título'}</h3>
+      <p><strong>Construtora:</strong> {getLocalizedText(property.basic_info?.developer, language) || 'N/A'}</p>
+      <p><strong>Bairro:</strong> {getLocalizedText(property.location?.neighborhood, language) || 'N/A'}</p>
       {latestSnapshot ? (
         <>
           <p><strong>Preço:</strong> {!latestSnapshot.price_brl ? 'Sob Consulta' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl)}</p>
-          <p><strong>Status:</strong> {latestSnapshot.status || 'N/A'}</p>
+          <p><strong>Status:</strong> {getLocalizedText(latestSnapshot.status, language) || 'N/A'}</p>
         </>
       ) : (
         <p><em>Sem dados financeiros/status no momento</em></p>
@@ -37,7 +41,7 @@ const PropertyCard = ({ property, latestSnapshot }) => {
           <h4>Detalhes Físicos</h4>
           <p><strong>Área:</strong> {property.features?.area_m2 ? `${property.features.area_m2} m²` : 'N/A'}</p>
           <p><strong>Quartos:</strong> {property.features?.bedrooms || 'N/A'}</p>
-          <p><strong>Posição Solar:</strong> {property.features?.sun_orientation || 'N/A'}</p>
+          <p><strong>Posição Solar:</strong> {getLocalizedText(property.features?.sun_orientation, language) || 'N/A'}</p>
           <p><strong>Distância do Mar:</strong> {property.location?.distance_to_beach_meters != null ? `${property.location.distance_to_beach_meters} m` : 'N/A'}</p>
 
           {aiContext && (
@@ -48,11 +52,11 @@ const PropertyCard = ({ property, latestSnapshot }) => {
                 <strong>ROI Estimado:</strong> {aiContext.investment_roi_estimated_percent != null ? `${aiContext.investment_roi_estimated_percent}%` : 'N/A'}
               </div>
 
-              {aiContext.target_persona && aiContext.target_persona.length > 0 && (
+              {targetPersona && targetPersona.length > 0 && (
                 <div className="persona-tags">
                   <strong>Público-alvo:</strong>
                   <div className="tags-container">
-                    {aiContext.target_persona.map((persona, index) => (
+                    {targetPersona.map((persona, index) => (
                       <span key={index} className="persona-tag">{persona}</span>
                     ))}
                   </div>
@@ -62,7 +66,7 @@ const PropertyCard = ({ property, latestSnapshot }) => {
               {aiContext.local_advantage && (
                 <div className="local-advantage-callout">
                   <span>💡</span>
-                  <p>{aiContext.local_advantage}</p>
+                  <p>{getLocalizedText(aiContext.local_advantage, language)}</p>
                 </div>
               )}
             </div>
@@ -84,6 +88,7 @@ const LanguageToggle = () => {
 };
 
 function App() {
+  const { language } = useLanguage();
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [email, setEmail] = useState('')
@@ -727,14 +732,14 @@ if (!data) {
                   <Marker
                     key={property.id}
                     position={[property.location.coordinates.lat, property.location.coordinates.lng]}
-                    icon={createCustomIcon(latestSnapshot?.status)}
+                    icon={createCustomIcon(getLocalizedText(latestSnapshot?.status, language))}
                   >
                     <Popup>
-                      <strong>{property.basic_info?.title || 'Sem Título'}</strong><br />
+                      <strong>{getLocalizedText(property.basic_info?.title, language) || 'Sem Título'}</strong><br />
                       {latestSnapshot ? (
                         <>
                           Preço: {!latestSnapshot.price_brl ? 'Sob Consulta' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl)}<br />
-                          Status: {latestSnapshot.status || 'N/A'}<br />
+                          Status: {getLocalizedText(latestSnapshot.status, language) || 'N/A'}<br />
                         </>
                       ) : <>Sem preço<br /></> }
                       {property.ai_context?.investment_roi_estimated_percent != null && (
@@ -757,7 +762,7 @@ if (!data) {
               };
 
               filteredProperties.forEach(property => {
-                const neighborhood = property.location?.neighborhood;
+                const neighborhood = getLocalizedText(property.location?.neighborhood, language);
                 if (!neighborhood) return;
 
                 const latestSnapshot = getLatestSnapshot(property);
