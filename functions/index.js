@@ -2,7 +2,6 @@ const { onObjectFinalized } = require("firebase-functions/v2/storage");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { initializeApp } = require("firebase-admin/app");
 const { VertexAI } = require('@google-cloud/vertexai');
-const path = require('path');
 
 initializeApp();
 const db = getFirestore();
@@ -11,34 +10,34 @@ const db = getFirestore();
 const vertex_ai = new VertexAI({ project: process.env.GOOGLE_CLOUD_PROJECT, location: 'us-central1' });
 const model = 'gemini-2.5-flash';
 
-// Define strict JSON schema for the output
+// Prísna realitná schéma pre štruktúrovaný výstup z Gemini
 const extractionSchema = {
     type: "OBJECT",
     properties: {
-        projectName: { type: "STRING" },
-        projectNumber: { type: "STRING" },
-        budget: { type: "NUMBER" },
-        deadline: { type: "STRING", format: "date" },
-        keyContacts: {
+        empreendimento: { type: "STRING" },
+        construtora: { type: "STRING" },
+        foco_vendas: { type: "STRING" },
+        unidades: {
             type: "ARRAY",
             items: {
                 type: "OBJECT",
                 properties: {
-                    name: { type: "STRING" },
-                    role: { type: "STRING" },
-                    email: { type: "STRING" }
+                    unidade: { type: "STRING" },
+                    tipologia: { type: "STRING" },
+                    area_privativa_m2: { type: "NUMBER" },
+                    quartos: { type: "NUMBER" },
+                    valor_total: { type: "NUMBER" }
                 },
-                required: ["name", "email"]
+                required: ["unidade", "valor_total", "area_privativa_m2"]
             }
         },
-        requirements: {
+        comodidades_premium: {
             type: "ARRAY",
             items: { type: "STRING" }
         }
     },
-    required: ["projectName", "projectNumber", "budget"]
+    required: ["empreendimento", "unidades"]
 };
-
 
 exports.processB2BPdf = onObjectFinalized({
     timeoutSeconds: 300,
@@ -48,7 +47,7 @@ exports.processB2BPdf = onObjectFinalized({
     const filePath = event.data.name;
     const contentType = event.data.contentType;
 
-    // Only process PDFs in the b2b_pdfs folder
+    // Spracovanie iba PDF súborov zo zložky b2b_pdfs
     if (!filePath.startsWith('b2b_pdfs/') || !contentType.includes('pdf')) {
         console.log(`Skipping non-PDF or non-target file: ${filePath}`);
         return;
@@ -76,7 +75,7 @@ exports.processB2BPdf = onObjectFinalized({
                                 mimeType: 'application/pdf'
                             }
                         },
-                        { text: 'Extract project details from this B2B PDF document.' }
+                        { text: 'Leia este Book e Tabela de Preços imobiliários. Extraia os dados do empreendimento, comodidades e a lista exata de unidades disponíveis com seus respectivos preços e metragens.' }
                     ]
                 }
             ]
@@ -97,10 +96,21 @@ exports.processB2BPdf = onObjectFinalized({
              throw new Error(`Failed to parse Gemini output as JSON: ${e.message}`);
         }
         
-        console.log(`Successfully extracted data for project: ${parsedData.projectName}`);
+        console.log(`Successfully extracted data for project: ${parsedData.empreendimento}`);
 
-        // Merge/Upsert Logic to prevent duplicates and protect manual overrides
-        const projectRef = db.collection('b2b_projects').doc(parsedData.projectNumber);
+        // Deterministický výpočet ceny za meter štvorcový (R$/m²) na backendovom úseku
+        if (parsedData.unidades && Array.isArray(parsedData.unidades)) {
+            parsedData.unidades = parsedData.unidades.map(u => {
+                if (u.valor_total && u.area_privativa_m2) {
+                    u.valor_m2 = parseFloat((u.valor_total / u.area_privativa_m2).toFixed(2));
+                }
+                return u;
+            });
+        }
+
+        // Generovanie čistého ID dokumentu na základe názvu projektu (odstránenie diakritiky a znakov)
+        const docId = parsedData.empreendimento.replace(/[^a-z0-9]/gi, '').toLowerCase();
+        const projectRef = db.collection('properties').doc(docId);
         
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(projectRef);
@@ -116,11 +126,11 @@ exports.processB2BPdf = onObjectFinalized({
             } else {
                 const existingData = doc.data();
                 if (existingData.isManualOverride) {
-                    console.log(`Skipping update for ${parsedData.projectNumber} due to manual override.`);
-                    return; // Do not overwrite manual edits
+                    console.log(`Skipping update for ${docId} due to manual override.`);
+                    return; // Ak maklér upravil dáta ručne, neprepísať ich automatikou
                 }
                 
-                // Merge data, prioritizing new extraction if needed, or simply update timestamp
+                // Zlúčenie nových cien a dostupnosti s ponechaním statických dát
                 transaction.set(projectRef, {
                     ...existingData,
                     ...parsedData,
@@ -130,11 +140,10 @@ exports.processB2BPdf = onObjectFinalized({
             }
         });
 
-        console.log(`Successfully upserted data for project: ${parsedData.projectNumber}`);
+        console.log(`Successfully upserted data for project: ${docId}`);
 
     } catch (error) {
         console.error(`Error processing PDF ${filePath}:`, error);
-        // Could also write error state to Firestore here for monitoring
         const errorRef = db.collection('ingestion_errors').doc();
         await errorRef.set({
             filePath: filePath,
@@ -142,4 +151,4 @@ exports.processB2BPdf = onObjectFinalized({
             timestamp: FieldValue.serverTimestamp()
         });
     }
-}); 
+});
