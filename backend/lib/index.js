@@ -46,7 +46,13 @@ admin.initializeApp();
 const apiSecret = (0, params_1.defineSecret)("API_SECRET");
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
-const vertexAi = new vertexai_1.VertexAI({ project: process.env.GCP_PROJECT, location: 'us-central1' });
+let vertexAiInstance = null;
+function getVertexAi() {
+    if (!vertexAiInstance) {
+        vertexAiInstance = new vertexai_1.VertexAI({ project: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT, location: 'us-central1' });
+    }
+    return vertexAiInstance;
+}
 exports.ingestPdf = (0, storage_1.onObjectFinalized)({
     timeoutSeconds: 300,
 }, async (event) => {
@@ -119,7 +125,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
       4. Extraia as unidades para features.area_m2 e snapshots[0].price_brl.
       5. "source" no snapshot deve ser "${filePath}".
     `;
-        const generativeModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const generativeModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
         const result = await generativeModel.generateContent({
             contents: [{
                     role: 'user',
@@ -277,7 +283,7 @@ exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (requ
 
               Message: "${text}"
             `;
-                            const routerModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+                            const routerModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
                             const routerResult = await routerModel.generateContent({
                                 contents: [{ role: 'user', parts: [{ text: intentPrompt }] }],
                             });
@@ -292,7 +298,7 @@ exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (requ
 
                 User question: "${text}"
               `;
-                                const ragModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+                                const ragModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
                                 const ragResult = await ragModel.generateContent({
                                     contents: [{ role: 'user', parts: [{ text: ragPrompt }] }],
                                 });
