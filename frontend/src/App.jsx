@@ -8,6 +8,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { db, auth } from './firebase'
+import PDFUploader from './components/PDFUploader';
 import './App.css'
 
 const PropertyCard = ({ property, latestSnapshot }) => {
@@ -475,7 +476,10 @@ if (!data) {
       {activeTab === 'acoes-manuais' && (
         <>
           <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
-            Ações Manuais: "Use estas ferramentas apenas para forçar extrações manuais de URLs específicas ou colar textos brutos."
+            Ações Manuais: Faça upload de PDFs B2B ou use ferramentas para forçar extrações manuais de URLs e textos brutos.
+          </div>
+          <div className="card" style={{ marginBottom: '2rem' }}>
+            <PDFUploader />
           </div>
           <div className="card" style={{ marginBottom: '2rem' }}>
             <h2>Ingestão de Dados (Upload Manual)</h2>
