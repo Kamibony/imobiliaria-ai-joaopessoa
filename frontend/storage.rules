@@ -1,22 +1,24 @@
 rules_version = '2';
-
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    
+    // Secure B2B PDF uploads
+    match /b2b_pdfs/{pdfId} {
+      // Allow upload if:
+      // 1. User is authenticated (requires custom token setup or standard Firebase Auth)
+      // 2. File size is under 50MB
+      // 3. File type is PDF
+      allow write: if request.auth != null 
+                   && request.resource.size < 50 * 1024 * 1024 
+                   && request.resource.contentType.matches('application/pdf');
+                   
+      // Allow read for authenticated users to view processed PDFs
+      allow read: if request.auth != null;
+    }
 
-    // This rule allows anyone with your Storage bucket reference to view, edit,
-    // and delete all data in your Storage bucket. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Storage bucket will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Storage bucket will be denied until you Update
-    // your rules
+    // Default deny all
     match /{allPaths=**} {
-      allow read, write: if request.time < timestamp.date(2026, 3, 30);
+      allow read, write: if false;
     }
   }
 }
