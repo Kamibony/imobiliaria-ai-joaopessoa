@@ -33,12 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.whatsappWebhook = exports.getTargetUrls = exports.reportDetectedChange = exports.processTriageAction = exports.getDiscoverySources = exports.addDiscoveredUrls = exports.dispatchScrapingMission = exports.filterDiscoveredUrls = exports.ingestPropertyData = exports.processPropertyData = void 0;
+exports.whatsappWebhook = exports.ingestPdf = void 0;
 const params_1 = require("firebase-functions/params");
 const https_1 = require("firebase-functions/v2/https");
-const tasks_1 = require("firebase-functions/v2/tasks");
+const storage_1 = require("firebase-functions/v2/storage");
 const admin = __importStar(require("firebase-admin"));
-const functions_1 = require("firebase-admin/functions");
 const vertexai_1 = require("@google-cloud/vertexai");
 const schema_1 = require("./schema");
 const utils_1 = require("./utils");
@@ -47,122 +46,94 @@ admin.initializeApp();
 const apiSecret = (0, params_1.defineSecret)("API_SECRET");
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
-async function verifyAuth(request) {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return false;
+const vertexAi = new vertexai_1.VertexAI({ project: process.env.GCP_PROJECT || 'imobiliaria-ai-joaopessoa', location: 'us-central1' });
+exports.ingestPdf = (0, storage_1.onObjectFinalized)({
+    bucket: "imobiliaria-ai-joaopessoa.appspot.com",
+    timeoutSeconds: 300,
+}, async (event) => {
+    const fileBucket = event.data.bucket;
+    const filePath = event.data.name;
+    if (!filePath.startsWith("b2b_pdfs/") || !filePath.toLowerCase().endsWith(".pdf")) {
+        console.log("File is not a PDF in b2b_pdfs directory. Ignoring.", filePath);
+        return;
     }
-    const token = authHeader.split("Bearer ")[1].trim();
-    const isDevEnv = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-    const expectedSecret = process.env.WEBHOOK_SECRET || apiSecret.value() || (isDevEnv ? 'dev_secret_fallback' : undefined);
-    if (!isDevEnv && !process.env.WEBHOOK_SECRET && !apiSecret.value()) {
-        console.error("DIAGNOSTIC: API_SECRET and WEBHOOK_SECRET are undefined in production environment.");
-    }
-    if (expectedSecret && token === expectedSecret.trim()) {
-        return true;
-    }
-    try {
-        await admin.auth().verifyIdToken(token);
-        return true;
-    }
-    catch (error) {
-        console.error("Firebase auth verification failed:", error);
-        return false;
-    }
-}
-// Initialize Vertex AI
-let project = 'imobiliaria-ai-joaopessoa';
-if (process.env.GCLOUD_PROJECT) {
-    project = process.env.GCLOUD_PROJECT;
-}
-else if (process.env.FIREBASE_CONFIG) {
-    try {
-        project = JSON.parse(process.env.FIREBASE_CONFIG).projectId;
-    }
-    catch (e) {
-        console.error('Error parsing FIREBASE_CONFIG', e);
-    }
-}
-const location = 'us-central1';
-const vertexAi = new vertexai_1.VertexAI({ project: project, location: location });
-// Queue worker function (process the data asynchronously)
-exports.processPropertyData = (0, tasks_1.onTaskDispatched)({
-    timeoutSeconds: 180,
-    retryConfig: {
-        maxAttempts: 3,
-        minBackoffSeconds: 60,
-    }
-}, async (req) => {
-    const { dataToParse, source, image_base64 } = req.data;
+    console.log(`Processing PDF: gs://${fileBucket}/${filePath}`);
+    const gsUri = `gs://${fileBucket}/${filePath}`;
     try {
         const prompt = `
-      You are an expert real estate data extractor for the Cabo Branco, Tambaú, and Bessa market in João Pessoa.
-      Extract the provided data and return a strict JSON object that perfectly matches the following TypeScript interface:
+      Leia este Book e Tabela de Preços imobiliários e extraia as unidades disponíveis.
+      O documento é de João Pessoa (bairros como Cabo Branco, Tambaú, Bessa).
 
-      export interface PropertySnapshot {
-        timestamp: string; // ISO 8601 date string
-        price_brl: number | null;
-        price_per_m2_brl: number | null;
-        status: 'na_planta' | 'em_construcao' | 'pronto';
-        source: string;
-      }
+      Retorne estritamente um array JSON contendo objetos de imóveis/unidades que se encaixem no seguinte modelo.
+      Para propriedades com múltiplas unidades (ex: apartamentos em um prédio), retorne um array com um objeto para cada unidade extraída.
+      Se for um único imóvel, retorne um array com um único objeto.
 
-      export interface Property {
-        id: string; // unique identifier
-        basic_info: {
-          title: string;
-          developer: string | null;
-          delivery_date: string | null; // ISO 8601 date string
-        };
-        location: {
-          neighborhood: 'Cabo Branco' | 'Tambau' | 'Bessa';
-          position_to_sea: 'beira_mar' | 'quadra_mar' | 'miolo';
-          distance_to_beach_meters: number;
-          coordinates: {
-            lat: number | null;
-            lng: number | null;
-          };
-        };
-        features: {
-          area_m2: number | null;
-          sun_orientation: 'nascente' | 'nascente_sul' | 'sul' | 'poente';
-          bedrooms: number | null;
-        };
-        snapshots: PropertySnapshot[];
-        ai_context: {
-          target_persona: {
-            'pt-BR': string[];
-            'en': string[];
-          };
-          investment_roi_estimated_percent: number;
-          local_advantage: {
-            'pt-BR': string;
-            'en': string;
-          };
-        };
-      }
+      Formato de saída esperado (Array de objetos):
+      [
+        {
+          "id": "identificador_unico_opcional",
+          "basic_info": {
+            "title": "nome do empreendimento / unidade",
+            "developer": "nome da construtora",
+            "delivery_date": "data de entrega ISO 8601 ou null"
+          },
+          "location": {
+            "neighborhood": "Cabo Branco", // Ou "Tambau", ou "Bessa"
+            "position_to_sea": "beira_mar", // Ou "quadra_mar", ou "miolo"
+            "distance_to_beach_meters": 100, // numero ou null
+            "coordinates": {
+              "lat": null,
+              "lng": null
+            }
+          },
+          "features": {
+            "area_m2": 85.5, // área privativa em m2 (numero) ou null
+            "sun_orientation": "nascente", // Ou "nascente_sul", "sul", "poente"
+            "bedrooms": 3 // numero ou null
+          },
+          "snapshots": [
+            {
+              "timestamp": "2024-05-20T12:00:00Z", // data atual
+              "price_brl": 850000, // valor total (numero) ou null
+              "status": "na_planta", // Ou "em_construcao", "pronto",
+              "source": "book_pdf"
+            }
+          ],
+          "ai_context": {
+            "target_persona": {
+              "pt-BR": ["Investidores", "Famílias"],
+              "en": ["Investors", "Families"]
+            },
+            "investment_roi_estimated_percent": 15, // numero ou null
+            "local_advantage": {
+              "pt-BR": "Excelente localização perto da praia.",
+              "en": "Excellent location near the beach."
+            }
+          }
+        }
+      ]
 
-      Guidelines:
-      1. ONLY return the raw JSON object. Do not include markdown formatting like \`\`\`json.
-      2. Set missing fields strictly to null (including for all numeric fields like prices, area, bedrooms, distance to beach). Do not use 0 for missing data.
-      3. For target_persona and local_advantage, provide localized strings in both pt-BR and en.
-      4. "source" in snapshot should be "${source}".
-
-      Data to extract:
-      ${dataToParse}
+      Diretrizes:
+      1. Retorne APENAS o JSON puro. Sem formatação markdown (` + "```json" + `).
+      2. Defina os campos numéricos (preço, área, quartos) estritamente como nulo (null) se não encontrar a informação. NUNCA use 0 para dados ausentes.
+      3. Extraia o "empreendimento" para basic_info.title, "construtora" para basic_info.developer.
+      4. Extraia as unidades para features.area_m2 e snapshots[0].price_brl.
+      5. "source" no snapshot deve ser "${filePath}".
     `;
         const generativeModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
-        let parts = [{ text: prompt }];
-        if (image_base64) {
-            parts.push({
-                inlineData: {
-                    data: image_base64,
-                    mimeType: "image/png"
-                }
-            });
-        }
         const result = await generativeModel.generateContent({
-            contents: [{ role: 'user', parts: parts }],
+            contents: [{
+                    role: 'user',
+                    parts: [
+                        { text: prompt },
+                        {
+                            fileData: {
+                                mimeType: "application/pdf",
+                                fileUri: gsUri
+                            }
+                        }
+                    ]
+                }],
             generationConfig: {
                 responseMimeType: "application/json",
             },
@@ -172,529 +143,114 @@ exports.processPropertyData = (0, tasks_1.onTaskDispatched)({
             console.error("No response text from Gemini.");
             throw new Error("Failed to extract data");
         }
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
-            console.error("No JSON block found in response:", responseText);
-            throw new Error("No JSON block found");
+            console.error("No JSON array found in response:", responseText);
+            throw new Error("No JSON array found");
         }
         const sanitizedText = jsonMatch[0];
-        let parsedData;
+        let extractedUnits;
         try {
-            parsedData = JSON.parse(sanitizedText);
+            extractedUnits = JSON.parse(sanitizedText);
         }
         catch (parseError) {
             console.error("Failed to parse Gemini response as JSON.", sanitizedText);
             throw new Error("Invalid JSON");
         }
-        // Validate using Zod schema
-        const validationResult = schema_1.PropertySchema.safeParse(parsedData);
-        if (!validationResult.success) {
-            console.error("Schema validation failed:", validationResult.error);
-            throw new Error("Schema validation failed");
+        if (!Array.isArray(extractedUnits)) {
+            console.error("Expected array of units, got something else.");
+            throw new Error("Invalid JSON format from LLM");
         }
-        let propertyData = validationResult.data;
-        // Convert string dates to Date objects
-        if (propertyData.basic_info?.delivery_date) {
-            propertyData.basic_info.delivery_date = new Date(propertyData.basic_info.delivery_date);
-        }
-        if (propertyData.snapshots && Array.isArray(propertyData.snapshots)) {
-            propertyData.snapshots.forEach((snap) => {
-                if (snap.timestamp) {
-                    snap.timestamp = new Date(snap.timestamp);
+        for (const unit of extractedUnits) {
+            // Validate using Zod schema
+            const validationResult = schema_1.PropertySchema.safeParse(unit);
+            if (!validationResult.success) {
+                console.error("Schema validation failed for a unit:", validationResult.error);
+                continue; // Skip invalid units
+            }
+            let propertyData = validationResult.data;
+            // Deterministically calculate price_per_m2_brl
+            if (propertyData.features?.area_m2 && propertyData.snapshots && propertyData.snapshots.length > 0) {
+                const snapshot = propertyData.snapshots[0];
+                if (snapshot.price_brl) {
+                    snapshot.price_per_m2_brl = Math.round(snapshot.price_brl / propertyData.features.area_m2);
                 }
                 else {
-                    snap.timestamp = new Date();
-                }
-                if (!snap.source) {
-                    snap.source = source || 'admin_upload';
-                }
-            });
-        }
-        const propertyId = propertyData.id || db.collection("properties").doc().id;
-        propertyData.id = propertyId;
-        // Coordinate Fallback Logic
-        propertyData.needs_geocoding = false;
-        if (propertyData.location) {
-            if (propertyData.location.coordinates?.lat == null || propertyData.location.coordinates?.lng == null) {
-                propertyData.needs_geocoding = true;
-                const fuzzyNeighborhood = (0, utils_1.fuzzyMatchNeighborhood)(propertyData.location.neighborhood);
-                // Ensure coordinates object exists
-                propertyData.location.coordinates = { lat: null, lng: null };
-                if (fuzzyNeighborhood === 'Cabo Branco') {
-                    propertyData.location.coordinates.lat = -7.1354;
-                    propertyData.location.coordinates.lng = -34.8210;
-                }
-                else if (fuzzyNeighborhood === 'Tambau') {
-                    propertyData.location.coordinates.lat = -7.1165;
-                    propertyData.location.coordinates.lng = -34.8228;
-                }
-                else if (fuzzyNeighborhood === 'Bessa') {
-                    propertyData.location.coordinates.lat = -7.0658;
-                    propertyData.location.coordinates.lng = -34.8322;
-                }
-                else {
-                    // Default fallback
-                    propertyData.location.coordinates.lat = -7.1150;
-                    propertyData.location.coordinates.lng = -34.8630;
+                    snapshot.price_per_m2_brl = null;
                 }
             }
-        }
-        const docRef = db.collection("properties").doc(propertyId);
-        const docSnap = await docRef.get();
-        if (docSnap.exists) {
-            const newSnapshots = propertyData.snapshots || [];
-            await docRef.update({
-                snapshots: admin.firestore.FieldValue.arrayUnion(...newSnapshots)
-            });
-            const { snapshots, ...otherData } = propertyData;
-            await docRef.set(otherData, { merge: true });
-        }
-        else {
-            await docRef.set(propertyData);
-        }
-        // Also save hash back to TargetURLs if we have the original URL from payload
-        if (req.data.url && req.data.new_hash) {
-            const targetUrlsRef = db.collection("TargetURLs");
-            const targetQuery = await targetUrlsRef.where('url', '==', req.data.url).get();
-            if (!targetQuery.empty) {
-                targetQuery.forEach(async (doc) => {
-                    await doc.ref.update({ last_content_hash: req.data.new_hash });
+            // Convert string dates to Date objects
+            if (propertyData.basic_info?.delivery_date) {
+                propertyData.basic_info.delivery_date = new Date(propertyData.basic_info.delivery_date);
+            }
+            if (propertyData.snapshots && Array.isArray(propertyData.snapshots)) {
+                propertyData.snapshots.forEach((snap) => {
+                    if (snap.timestamp) {
+                        snap.timestamp = new Date(snap.timestamp);
+                    }
+                    else {
+                        snap.timestamp = new Date();
+                    }
+                    if (!snap.source || snap.source === "book_pdf") {
+                        snap.source = filePath;
+                    }
                 });
             }
+            const propertyId = propertyData.id || db.collection("properties").doc().id;
+            propertyData.id = propertyId;
+            // Coordinate Fallback Logic
+            propertyData.needs_geocoding = false;
+            if (propertyData.location) {
+                if (propertyData.location.coordinates?.lat == null || propertyData.location.coordinates?.lng == null) {
+                    propertyData.needs_geocoding = true;
+                    const fuzzyNeighborhood = (0, utils_1.fuzzyMatchNeighborhood)(propertyData.location.neighborhood);
+                    // Ensure coordinates object exists
+                    propertyData.location.coordinates = { lat: null, lng: null };
+                    if (fuzzyNeighborhood === 'Cabo Branco') {
+                        propertyData.location.coordinates.lat = -7.1354;
+                        propertyData.location.coordinates.lng = -34.8210;
+                    }
+                    else if (fuzzyNeighborhood === 'Tambau') {
+                        propertyData.location.coordinates.lat = -7.1165;
+                        propertyData.location.coordinates.lng = -34.8228;
+                    }
+                    else if (fuzzyNeighborhood === 'Bessa') {
+                        propertyData.location.coordinates.lat = -7.0658;
+                        propertyData.location.coordinates.lng = -34.8322;
+                    }
+                    else {
+                        propertyData.location.coordinates.lat = -7.1150;
+                        propertyData.location.coordinates.lng = -34.8630;
+                    }
+                }
+            }
+            const docRef = db.collection("properties").doc(propertyId);
+            await db.runTransaction(async (transaction) => {
+                const docSnap = await transaction.get(docRef);
+                if (docSnap.exists) {
+                    const newSnapshots = propertyData.snapshots || [];
+                    const existingData = docSnap.data();
+                    const existingSnapshots = existingData?.snapshots || [];
+                    const mergedSnapshots = [...existingSnapshots, ...newSnapshots];
+                    const { snapshots, ...otherData } = propertyData;
+                    transaction.set(docRef, { ...otherData, snapshots: mergedSnapshots }, { merge: true });
+                }
+                else {
+                    transaction.set(docRef, propertyData);
+                }
+            });
+            console.log(`Successfully processed PDF unit and saved property ${propertyId}`);
         }
     }
     catch (error) {
-        console.error("Error processing property data task:", error);
-        throw error; // Will retry via Cloud Tasks
+        console.error("Error processing PDF:", error);
+        throw error;
     }
 });
-exports.ingestPropertyData = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const payload = request.body;
-            let dataToParse = "";
-            let source = "admin_upload";
-            if (typeof payload === "string") {
-                dataToParse = payload;
-            }
-            else if (typeof payload === "object") {
-                if (payload.raw_text) {
-                    dataToParse = payload.raw_text;
-                }
-                else {
-                    dataToParse = JSON.stringify(payload);
-                }
-                if (payload.source) {
-                    source = payload.source;
-                }
-            }
-            else {
-                response.status(400).send("Invalid payload format. Expected string or JSON.");
-                return;
-            }
-            const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
-            try {
-                await queue.enqueue({
-                    dataToParse,
-                    source,
-                    url: payload.url,
-                    new_hash: payload.new_hash,
-                    image_base64: payload.image_base64
-                });
-            }
-            catch (e) {
-                console.error("Failed to enqueue task", e);
-                throw e;
-            }
-            response.status(202).send({ message: "Data received and queued for processing." });
-        }
-        catch (error) {
-            console.error("Error queueing property data:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-// HTTP Cloud Function to filter discovered URLs using Gemini
-exports.filterDiscoveredUrls = (0, https_1.onRequest)({ timeoutSeconds: 120, secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const payload = request.body;
-            // Ensure payload is an array of objects
-            if (!Array.isArray(payload)) {
-                response.status(400).send("Invalid payload format. Expected an array of link objects.");
-                return;
-            }
-            const linksToFilter = payload.filter((link) => typeof link === "object" && link !== null && link.href);
-            if (linksToFilter.length === 0) {
-                response.status(400).send("No valid links provided in the array.");
-                return;
-            }
-            const prompt = `
-      You are an expert real estate data assistant focused on the João Pessoa market, specifically the coastal neighborhoods of Cabo Branco, Tambaú, and Bessa.
-      I will provide you a JSON list of links extracted from developer websites.
-      Your task is to filter this list and return ONLY the URLs that likely point to individual property/project detail pages in our target geographic area.
-      Discard any noise such as contact pages, about us, main index pages, blog posts, generic searches, or projects located in other cities or states.
-
-      Return ONLY a raw JSON array of strings containing the selected URLs, and nothing else. No markdown formatting, no explanations.
-      Ensure the output is parseable by JSON.parse().
-
-      Links to evaluate:
-      ${JSON.stringify(linksToFilter, null, 2)}
-    `;
-            const filterModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
-            const result = await filterModel.generateContent({
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: {
-                    responseMimeType: "application/json",
-                },
-            });
-            const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!responseText) {
-                console.error("No response text from Gemini in filterDiscoveredUrls");
-                response.status(500).send("Failed to filter URLs");
-                return;
-            }
-            const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-            if (!jsonMatch) {
-                console.error("No JSON array found in response:", responseText);
-                response.status(500).send("Internal Server Error: No JSON array found");
-                return;
-            }
-            const sanitizedText = jsonMatch[0];
-            // Parse the JSON string into an object
-            let filteredUrls = [];
-            try {
-                filteredUrls = JSON.parse(sanitizedText);
-            }
-            catch (parseError) {
-                console.error("Failed to parse Gemini response as JSON in filterDiscoveredUrls.");
-                console.error("Raw responseText:", responseText);
-                console.error("Sanitized text:", sanitizedText);
-                console.error("Parse error:", parseError);
-                response.status(500).send("Internal Server Error: Failed to parse filtered URLs");
-                return;
-            }
-            response.status(200).json(filteredUrls);
-        }
-        catch (error) {
-            console.error("Error filtering URLs:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-exports.dispatchScrapingMission = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const payload = request.body;
-            if (!payload || typeof payload.url !== "string" || !payload.url || typeof payload.instruction !== "string" || !payload.instruction) {
-                response.status(400).send("Invalid payload format. Expected an object with 'url' and 'instruction' strings.");
-                return;
-            }
-            const taskSessionsRef = db.collection("task_sessions");
-            const newDocRef = taskSessionsRef.doc();
-            const missionDoc = {
-                doc_id: newDocRef.id,
-                status: "PENDING",
-                intent: "WEB",
-                supervisor_plan: [
-                    `[WEB] Navigate to URL: ${payload.url}`,
-                    `[WEB] ${payload.instruction}`
-                ],
-                created_at: admin.firestore.FieldValue.serverTimestamp()
-            };
-            await newDocRef.set(missionDoc);
-            response.status(200).json({
-                message: "Scraping mission dispatched successfully.",
-                block_id: newDocRef.id
-            });
-        }
-        catch (error) {
-            console.error("Error dispatching scraping mission:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-exports.addDiscoveredUrls = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const payload = request.body;
-            // Ensure payload is an array of strings
-            if (!Array.isArray(payload)) {
-                response.status(400).send("Invalid payload format. Expected an array of URLs.");
-                return;
-            }
-            const newUrls = payload.filter((url) => typeof url === "string");
-            if (newUrls.length === 0) {
-                response.status(400).send("No valid URLs provided in the array.");
-                return;
-            }
-            const targetUrlsRef = db.collection("TargetURLs");
-            const reviewInboxRef = db.collection("ReviewInbox");
-            // Get existing URLs from TargetURLs to prevent pushing already known URLs to review
-            const targetSnapshot = await targetUrlsRef.get();
-            const existingUrls = new Set();
-            targetSnapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.url) {
-                    existingUrls.add(data.url.trim().replace(/\/$/, ""));
-                }
-            });
-            // Get URLs already in ReviewInbox to prevent duplicate queue entries
-            const inboxSnapshot = await reviewInboxRef.where("type", "==", "DISCOVERY").where("status", "==", "PENDING").get();
-            const inboxUrls = new Set();
-            inboxSnapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.url) {
-                    inboxUrls.add(data.url.trim().replace(/\/$/, ""));
-                }
-            });
-            let addedCount = 0;
-            const normalizeUrl = (url) => url.trim().replace(/\/$/, "");
-            const batch = db.batch();
-            for (const rawUrl of newUrls) {
-                const url = normalizeUrl(rawUrl);
-                if (!existingUrls.has(url) && !inboxUrls.has(url)) {
-                    const newDocRef = reviewInboxRef.doc();
-                    batch.set(newDocRef, {
-                        id: newDocRef.id,
-                        type: 'DISCOVERY',
-                        status: 'PENDING',
-                        url,
-                        created_at: admin.firestore.FieldValue.serverTimestamp()
-                    });
-                    inboxUrls.add(url);
-                    addedCount++;
-                }
-            }
-            if (addedCount > 0) {
-                await batch.commit();
-            }
-            response.status(200).json({
-                message: `Successfully processed URLs. Added ${addedCount} new URLs to ReviewInbox.`,
-                addedCount
-            });
-        }
-        catch (error) {
-            console.error("Error adding discovered URLs:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-// HTTP Cloud Function to get dynamic target URLs for the scraper
-exports.getDiscoverySources = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const discoverySourcesRef = db.collection("DiscoverySources");
-            const snapshot = await discoverySourcesRef.get();
-            const sources = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.source) {
-                    sources.push({
-                        id: doc.id,
-                        source: data.source,
-                        type: data.type || 'URL',
-                    });
-                }
-            });
-            response.status(200).json(sources);
-        }
-        catch (error) {
-            console.error("Error fetching discovery sources:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-exports.processTriageAction = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const payload = request.body;
-            if (!payload || !payload.id || !payload.action || !payload.type) {
-                response.status(400).send("Invalid payload format. Expected id, action (APPROVE/DISCARD), and type.");
-                return;
-            }
-            const { id, action, type, url, new_hash, raw_text, image_base64 } = payload;
-            if (action !== 'APPROVE' && action !== 'DISCARD') {
-                response.status(400).send("Invalid action. Must be APPROVE or DISCARD.");
-                return;
-            }
-            const reviewInboxRef = db.collection("ReviewInbox");
-            const docRef = reviewInboxRef.doc(id);
-            const docSnap = await docRef.get();
-            if (!docSnap.exists) {
-                response.status(404).send("Item not found in Review Inbox.");
-                return;
-            }
-            await docRef.update({ status: action === 'APPROVE' ? 'APPROVED' : 'DISCARDED' });
-            if (action === 'APPROVE') {
-                const targetUrlsRef = db.collection("TargetURLs");
-                if (type === 'DISCOVERY') {
-                    // Check if already in TargetURLs
-                    const targetQuery = await targetUrlsRef.where('url', '==', url).get();
-                    if (targetQuery.empty) {
-                        await targetUrlsRef.add({
-                            url: url,
-                            last_content_hash: null,
-                        });
-                    }
-                    // Dispatch scraping mission
-                    const taskSessionsRef = db.collection("task_sessions");
-                    await taskSessionsRef.add({
-                        doc_id: taskSessionsRef.doc().id, // Let Firestore generate ID, but save it in field
-                        status: "PENDING",
-                        intent: "WEB",
-                        supervisor_plan: [
-                            `[WEB] Navigate to URL: ${url}`,
-                            `[WEB] Extract real estate property details for João Pessoa.`
-                        ],
-                        created_at: admin.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-                else if (type === 'CHANGE') {
-                    // Update hash in TargetURLs
-                    const targetQuery = await targetUrlsRef.where('url', '==', url).get();
-                    if (!targetQuery.empty) {
-                        targetQuery.forEach(async (doc) => {
-                            await doc.ref.update({ last_content_hash: new_hash });
-                        });
-                    }
-                    else {
-                        // Add it if it somehow isn't there
-                        await targetUrlsRef.add({
-                            url: url,
-                            last_content_hash: new_hash,
-                        });
-                    }
-                    let fullImageBase64 = null;
-                    if (image_base64) {
-                        const bucket = admin.storage().bucket();
-                        const file = bucket.file(image_base64);
-                        try {
-                            const [buffer] = await file.download();
-                            fullImageBase64 = buffer.toString('base64');
-                        }
-                        catch (e) {
-                            console.error("Failed to download image from storage", e);
-                        }
-                    }
-                    // Enqueue data for deep extraction
-                    const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
-                    await queue.enqueue({
-                        dataToParse: raw_text,
-                        source: 'python_playwright_scraper',
-                        url: url,
-                        new_hash: new_hash,
-                        image_base64: fullImageBase64
-                    });
-                }
-            }
-            response.status(200).json({ message: `Triage action ${action} processed successfully for ${type}.` });
-        }
-        catch (error) {
-            console.error("Error processing triage action:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-exports.reportDetectedChange = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const payload = request.body;
-            if (!payload || !payload.url || !payload.new_hash || !payload.raw_text) {
-                response.status(400).send("Invalid payload format. Expected url, new_hash, and raw_text.");
-                return;
-            }
-            let storagePath = null;
-            if (payload.image_base64) {
-                const bucket = admin.storage().bucket();
-                const imageBuffer = Buffer.from(payload.image_base64, 'base64');
-                const filename = `changes/${Date.now()}_${payload.url.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
-                const file = bucket.file(filename);
-                await file.save(imageBuffer, {
-                    metadata: { contentType: 'image/png' },
-                });
-                storagePath = filename;
-            }
-            const reviewInboxRef = db.collection("ReviewInbox");
-            const newDocRef = reviewInboxRef.doc();
-            await newDocRef.set({
-                id: newDocRef.id,
-                type: 'CHANGE',
-                status: 'PENDING',
-                url: payload.url,
-                new_hash: payload.new_hash,
-                raw_text: payload.raw_text,
-                image_base64: storagePath, // Store path instead of massive string
-                created_at: admin.firestore.FieldValue.serverTimestamp()
-            });
-            response.status(200).json({ message: "Change reported successfully." });
-        }
-        catch (error) {
-            console.error("Error reporting change:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-exports.getTargetUrls = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
-    corsHandler(request, response, async () => {
-        if (!(await verifyAuth(request))) {
-            response.status(401).send("Unauthorized");
-            return;
-        }
-        try {
-            const targetUrlsRef = db.collection("TargetURLs");
-            const snapshot = await targetUrlsRef.get();
-            const urls = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.url) {
-                    urls.push({
-                        url: data.url.trim().replace(/\/$/, ""),
-                        last_content_hash: data.last_content_hash || null,
-                    });
-                }
-            });
-            response.status(200).json(urls);
-        }
-        catch (error) {
-            console.error("Error fetching target URLs:", error);
-            response.status(500).send("Internal Server Error");
-        }
-    });
-});
-// WhatsApp Webhook
+// Keep whatsappWebhook for WhatsApp concierge multi-agent logic
 exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (request, response) => {
     corsHandler(request, response, async () => {
         if (request.method === 'GET') {
-            // WhatsApp Verification
             const mode = request.query['hub.mode'];
             const token = request.query['hub.verify_token'];
             const challenge = request.query['hub.challenge'];
@@ -712,15 +268,13 @@ exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (requ
                 if (body.object) {
                     if (body.entry && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
                         const message = body.entry[0].changes[0].value.messages[0];
-                        const from = message.from; // Sender's phone number
+                        const from = message.from;
                         const text = message.text?.body;
                         if (text) {
-                            // Intent Router
                             const intentPrompt = `
               Analyze the following WhatsApp message from a real estate context.
-              Determine the user's intent. Return ONLY "INGESTION" if the message contains property details to be added to the catalog (e.g., price, area, description, "I have a property").
-              Return ONLY "INQUIRY" if the user is asking a question about properties, prices, or recommendations (e.g., "What do you have in Bessa?", "Looking for a 2 bedroom").
-              If unsure, return "INQUIRY".
+              Determine the user's intent. Return ONLY "INGESTION" se for para ingestão de dados,
+              ou ONLY "INQUIRY" se for pergunta sobre o catálogo.
 
               Message: "${text}"
             `;
@@ -730,26 +284,12 @@ exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (requ
                             });
                             const intent = routerResult.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toUpperCase();
                             if (intent === 'INGESTION') {
-                                // Queue for ingestion
-                                const queue = (0, functions_1.getFunctions)().taskQueue('processPropertyData');
-                                try {
-                                    await queue.enqueue({
-                                        dataToParse: text,
-                                        source: 'whatsapp_broker'
-                                    });
-                                    console.log(`Queued WhatsApp ingestion for ${from}`);
-                                }
-                                catch (e) {
-                                    console.error("Failed to queue WhatsApp ingestion", e);
-                                }
-                                // Send summary/confirmation via WhatsApp API (mocked here, would use actual WhatsApp API)
-                                console.log(`Sending WhatsApp reply to ${from}: "Entendi! Estou processando as informações deste imóvel e adicionando ao catálogo."`);
+                                console.log(`WhatsApp INGESTION detected for ${from}`);
                             }
                             else {
-                                // Inquiry handling (RAG simulation)
                                 const ragPrompt = `
                 You are a helpful Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa).
-                Answer the user's question concisely in Brazilian Portuguese. Highlight ROI and local advantages if relevant.
+                Answer the user's question concisely in Brazilian Portuguese.
 
                 User question: "${text}"
               `;
@@ -758,7 +298,6 @@ exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (requ
                                     contents: [{ role: 'user', parts: [{ text: ragPrompt }] }],
                                 });
                                 const replyText = ragResult.response.candidates?.[0]?.content?.parts?.[0]?.text;
-                                // Send reply via WhatsApp API (mocked)
                                 console.log(`Sending WhatsApp reply to ${from}: "${replyText}"`);
                             }
                         }
