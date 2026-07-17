@@ -15,7 +15,13 @@ const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 
 
-const vertexAi = new VertexAI({ project: process.env.GCP_PROJECT, location: 'us-central1' });
+let vertexAiInstance: VertexAI | null = null;
+function getVertexAi() {
+  if (!vertexAiInstance) {
+    vertexAiInstance = new VertexAI({ project: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT, location: 'us-central1' });
+  }
+  return vertexAiInstance;
+}
 
 export const ingestPdf = onObjectFinalized({
   timeoutSeconds: 300,
@@ -93,7 +99,7 @@ export const ingestPdf = onObjectFinalized({
       5. "source" no snapshot deve ser "${filePath}".
     `;
 
-    const generativeModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const generativeModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const result = await generativeModel.generateContent({
       contents: [{
@@ -268,7 +274,7 @@ export const whatsappWebhook = onRequest({ secrets: [apiSecret] }, (request, res
               Message: "${text}"
             `;
 
-            const routerModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const routerModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
             const routerResult = await routerModel.generateContent({
               contents: [{ role: 'user', parts: [{ text: intentPrompt }] }],
             });
@@ -283,7 +289,7 @@ export const whatsappWebhook = onRequest({ secrets: [apiSecret] }, (request, res
 
                 User question: "${text}"
               `;
-              const ragModel = vertexAi.getGenerativeModel({ model: "gemini-2.5-flash" });
+              const ragModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
               const ragResult = await ragModel.generateContent({
                 contents: [{ role: 'user', parts: [{ text: ragPrompt }] }],
               });
