@@ -46,9 +46,8 @@ admin.initializeApp();
 const apiSecret = (0, params_1.defineSecret)("API_SECRET");
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
-const vertexAi = new vertexai_1.VertexAI({ project: process.env.GCP_PROJECT || 'imobiliaria-ai-joaopessoa', location: 'us-central1' });
+const vertexAi = new vertexai_1.VertexAI({ project: process.env.GCP_PROJECT, location: 'us-central1' });
 exports.ingestPdf = (0, storage_1.onObjectFinalized)({
-    bucket: "imobiliaria-ai-joaopessoa.appspot.com",
     timeoutSeconds: 300,
 }, async (event) => {
     const fileBucket = event.data.bucket;

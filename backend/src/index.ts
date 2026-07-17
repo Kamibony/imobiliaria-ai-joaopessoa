@@ -15,10 +15,9 @@ const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 
 
-const vertexAi = new VertexAI({ project: process.env.GCP_PROJECT || 'imobiliaria-ai-joaopessoa', location: 'us-central1' });
+const vertexAi = new VertexAI({ project: process.env.GCP_PROJECT, location: 'us-central1' });
 
 export const ingestPdf = onObjectFinalized({
-  bucket: "imobiliaria-ai-joaopessoa.appspot.com",
   timeoutSeconds: 300,
 }, async (event) => {
   const fileBucket = event.data.bucket;
