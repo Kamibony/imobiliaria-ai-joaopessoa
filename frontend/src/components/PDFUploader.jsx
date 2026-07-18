@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { getStorage, ref, uploadBytes } from 'firebase/storage';
-// Ensure firebase is initialized somewhere in the app before this component is used
+import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebase'; // Import db and auth
 
 const PDFUploader = () => {
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -22,9 +23,22 @@ const PDFUploader = () => {
     setUploadStatus('uploading');
 
     try {
-      const storage = getStorage();
-      const storageRef = ref(storage, `b2b_pdfs/${Date.now()}_${file.name}`);
+      const timestamp = Date.now();
+      const fileName = `${timestamp}_${file.name}`;
       
+      // 1. Create a job record in Firestore BEFORE uploading
+      const jobRef = doc(collection(db, 'pdf_jobs'), fileName);
+      await setDoc(jobRef, {
+        fileName: file.name,
+        storagePath: `b2b_pdfs/${fileName}`,
+        status: 'Queued',
+        uploadedAt: serverTimestamp(),
+        uploadedBy: auth.currentUser?.email || 'unknown',
+      });
+
+      // 2. Upload to Storage
+      const storage = getStorage();
+      const storageRef = ref(storage, `b2b_pdfs/${fileName}`);
       await uploadBytes(storageRef, file);
 
       setUploadStatus('success');

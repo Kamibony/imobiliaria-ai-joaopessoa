@@ -37,6 +37,19 @@ export const ingestPdf = onObjectFinalized({
   console.log(`Processing PDF: gs://${fileBucket}/${filePath}`);
   const gsUri = `gs://${fileBucket}/${filePath}`;
 
+  // Extract just the filename without the 'b2b_pdfs/' prefix
+  const fileName = filePath.split("/").pop();
+
+  if (fileName) {
+    try {
+      await db.collection("pdf_jobs").doc(fileName).update({
+        status: "Processing",
+      });
+    } catch (e) {
+      console.log("Could not update pdf_jobs to Processing, moving on...", e);
+    }
+  }
+
   try {
     const prompt = `
       Leia este Book e Tabela de Preços imobiliários e extraia as unidades disponíveis.
@@ -233,8 +246,28 @@ export const ingestPdf = onObjectFinalized({
       console.log(`Successfully processed PDF unit and saved property ${propertyId}`);
     }
 
-  } catch (error) {
+    if (fileName) {
+      try {
+        await db.collection("pdf_jobs").doc(fileName).update({
+          status: "Success",
+        });
+      } catch (e) {
+        console.log("Could not update pdf_jobs to Success, moving on...", e);
+      }
+    }
+
+  } catch (error: any) {
     console.error("Error processing PDF:", error);
+    if (fileName) {
+      try {
+        await db.collection("pdf_jobs").doc(fileName).update({
+          status: "Failed",
+          error: error.message || "Unknown error",
+        });
+      } catch (e) {
+        console.log("Could not update pdf_jobs to Failed, moving on...", e);
+      }
+    }
     throw error;
   }
 });
