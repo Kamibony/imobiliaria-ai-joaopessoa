@@ -12,84 +12,148 @@ import { db, auth } from './firebase'
 import PDFUploader from './components/PDFUploader';
 import './App.css'
 
-const PropertyCard = ({ property, latestSnapshot, onVerifySource }) => {
+const ProjectDetailModal = ({ project, onClose, onVerifySource }) => {
   const { language } = useLanguage();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const aiContext = property.ai_context;
+  const [units, setUnits] = useState([]);
+  const [loadingUnits, setLoadingUnits] = useState(true);
 
+  useEffect(() => {
+    if (!project || !project.id) return;
+    const unitsRef = collection(db, 'projects', project.id, 'units');
+    const unsubscribe = onSnapshot(unitsRef, (snapshot) => {
+      const unitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUnits(unitsData);
+      setLoadingUnits(false);
+    });
+    return () => unsubscribe();
+  }, [project]);
+
+  if (!project) return null;
+
+  const aiContext = project.ai_context;
   const targetPersonaRaw = aiContext ? getLocalizedText(aiContext.target_persona, language) : null;
   const targetPersona = Array.isArray(targetPersonaRaw) ? targetPersonaRaw : (typeof targetPersonaRaw === 'string' ? [targetPersonaRaw] : []);
 
+  const getLatestSnapshot = (unit) => {
+    const snapshots = unit.snapshots || [];
+    const sortedSnapshots = [...snapshots].sort((a, b) => {
+      const dateA = new Date(a.timestamp);
+      const dateB = new Date(b.timestamp);
+      return dateB - dateA;
+    });
+    return sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
+  };
+
   return (
-    <div className="property-card">
-      <h3>{getLocalizedText(property.basic_info?.title, language) || 'Sem Título'}</h3>
-      <p><strong>Construtora:</strong> {getLocalizedText(property.basic_info?.developer, language) || 'N/A'}</p>
-      <p><strong>Bairro:</strong> {getLocalizedText(property.location?.neighborhood, language) || 'N/A'}</p>
-      {latestSnapshot ? (
-        <>
-          <p><strong>Preço:</strong> {!latestSnapshot.price_brl ? 'Sob Consulta' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl)}</p>
-          <p><strong>Status:</strong> {getLocalizedText(latestSnapshot.status, language) || 'N/A'}</p>
-        </>
-      ) : (
-        <p><em>Sem dados financeiros/status no momento</em></p>
-      )}
-
-      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-        <button className="expand-btn" style={{ marginTop: 0 }} onClick={() => setIsExpanded(!isExpanded)}>
-          {isExpanded ? 'Ocultar Detalhes' : 'Ver Detalhes'}
-        </button>
-        {latestSnapshot && latestSnapshot.source && (
-          <button
-            className="expand-btn"
-            style={{ marginTop: 0, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}
-            onClick={() => onVerifySource(latestSnapshot.source)}
-          >
-            🔍 Verificar Fonte
-          </button>
-        )}
-      </div>
-
-      {isExpanded && (
-        <div className="expanded-details">
-          <h4>Detalhes Físicos</h4>
-          <p><strong>Área:</strong> {property.features?.area_m2 ? `${property.features.area_m2} m²` : 'N/A'}</p>
-          <p><strong>Quartos:</strong> {property.features?.bedrooms || 'N/A'}</p>
-          <p><strong>Posição Solar:</strong> {getLocalizedText(property.features?.sun_orientation, language) || 'N/A'}</p>
-          <p><strong>Distância do Mar:</strong> {property.location?.distance_to_beach_meters != null ? `${property.location.distance_to_beach_meters} m` : 'N/A'}</p>
-
-          {aiContext && (
-            <div className="ai-insights">
-              <h4>✨ AI Insights</h4>
-
-              <div className="roi-badge">
-                <strong>ROI Estimado:</strong> {aiContext.investment_roi_estimated_percent != null ? `${aiContext.investment_roi_estimated_percent}%` : 'N/A'}
-              </div>
-
-              {targetPersona && targetPersona.length > 0 && (
-                <div className="persona-tags">
-                  <strong>Público-alvo:</strong>
-                  <div className="tags-container">
-                    {targetPersona.map((persona, index) => (
-                      <span key={index} className="persona-tag">{persona}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {aiContext.local_advantage && (
-                <div className="local-advantage-callout">
-                  <span>💡</span>
-                  <p>{getLocalizedText(aiContext.local_advantage, language)}</p>
-                </div>
+    <div className="audit-modal">
+      <div className="audit-modal-content" style={{ width: '80%', maxWidth: '1000px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="audit-modal-header" style={{ padding: '1.5rem', borderBottom: '1px solid #e5e7eb' }}>
+          <h2>{project.name || 'Sem Título'}</h2>
+          <button onClick={onClose} className="close-btn" style={{ fontSize: '1.5rem' }}>✕</button>
+        </div>
+        <div className="audit-modal-body" style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '300px' }}>
+              <h3>Detalhes do Empreendimento</h3>
+              <p><strong>Construtora:</strong> {project.developer || 'N/A'}</p>
+              <p><strong>Bairro:</strong> {getLocalizedText(project.location?.neighborhood, language) || 'N/A'}</p>
+              <p><strong>Status:</strong> {getLocalizedText(project.status, language) || 'N/A'}</p>
+              <p><strong>Entrega:</strong> {project.delivery_date ? new Date(project.delivery_date).toLocaleDateString() : 'N/A'}</p>
+              {project.amenities && project.amenities.length > 0 && (
+                <p><strong>Comodidades:</strong> {project.amenities.join(', ')}</p>
               )}
             </div>
-          )}
+            {aiContext && (
+              <div style={{ flex: 1, minWidth: '300px' }} className="ai-insights">
+                <h4>✨ AI Insights</h4>
+                <div className="roi-badge">
+                  <strong>ROI Estimado:</strong> {aiContext.investment_roi_estimated_percent != null ? `${aiContext.investment_roi_estimated_percent}%` : 'N/A'}
+                </div>
+                {targetPersona && targetPersona.length > 0 && (
+                  <div className="persona-tags">
+                    <strong>Público-alvo:</strong>
+                    <div className="tags-container">
+                      {targetPersona.map((persona, index) => (
+                        <span key={index} className="persona-tag">{persona}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {aiContext.local_advantage && (
+                  <div className="local-advantage-callout">
+                    <span>💡</span>
+                    <p>{getLocalizedText(aiContext.local_advantage, language)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: '2rem' }}>
+            <h3>Inventário (Unidades)</h3>
+            {loadingUnits ? (
+              <p>Carregando unidades...</p>
+            ) : units.length === 0 ? (
+              <p>Nenhuma unidade encontrada para este empreendimento.</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #ddd', textAlign: 'left', backgroundColor: '#f9fafb' }}>
+                    <th style={{ padding: '12px' }}>Unidade</th>
+                    <th style={{ padding: '12px' }}>Área (m²)</th>
+                    <th style={{ padding: '12px' }}>Quartos</th>
+                    <th style={{ padding: '12px' }}>Preço</th>
+                    <th style={{ padding: '12px' }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {units.map(unit => {
+                    const latest = getLatestSnapshot(unit);
+                    return (
+                      <tr key={unit.id} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '12px' }}><strong>{unit.unit_number || unit.id}</strong></td>
+                        <td style={{ padding: '12px' }}>{unit.area_m2 || '-'}</td>
+                        <td style={{ padding: '12px' }}>{unit.bedrooms || '-'}</td>
+                        <td style={{ padding: '12px' }}>
+                          {latest && latest.price_brl ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latest.price_brl) : 'Sob Consulta'}
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          {latest && latest.source && (
+                            <button
+                              onClick={() => onVerifySource(latest.source)}
+                              style={{ padding: '4px 8px', fontSize: '0.85em', cursor: 'pointer', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '4px' }}
+                            >
+                              Ver Fonte
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
+const ProjectCard = ({ project, onSelectProject }) => {
+  const { language } = useLanguage();
+  return (
+    <div className="property-card" style={{ cursor: 'pointer' }} onClick={() => onSelectProject(project)}>
+      <h3>{project.name || 'Sem Título'}</h3>
+      <p><strong>Construtora:</strong> {project.developer || 'N/A'}</p>
+      <p><strong>Bairro:</strong> {getLocalizedText(project.location?.neighborhood, language) || 'N/A'}</p>
+      <p><strong>Status:</strong> {getLocalizedText(project.status, language) || 'N/A'}</p>
+      <div style={{ marginTop: '1rem', color: '#007bff', fontWeight: 'bold' }}>
+        Ver Detalhes e Unidades ➔
+      </div>
+    </div>
+  );
+};
 
 const LanguageToggle = () => {
   const { language, toggleLanguage } = useLanguage();
@@ -109,12 +173,13 @@ function App() {
   const [authError, setAuthError] = useState('')
 
   const [activeTab, setActiveTab] = useState('upload')
-  const [properties, setProperties] = useState([])
+  const [projects, setProjects] = useState([])
   const [pdfJobs, setPdfJobs] = useState([]);
 
   const [auditSourceUrl, setAuditSourceUrl] = useState(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
   const [auditLoading, setAuditLoading] = useState(false)
+  const [selectedProject, setSelectedProject] = useState(null)
 
   const [filterBairro, setFilterBairro] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
@@ -149,18 +214,17 @@ function App() {
     return sortedSnapshots.length > 0 ? sortedSnapshots[0] : null;
   }
 
-  const filteredProperties = useMemo(() => {
-    return properties.filter(p => {
-      const latestSnapshot = getLatestSnapshot(p);
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => {
       const bairroMatch = filterBairro === 'All' ||
                           (p.location?.neighborhood === filterBairro) ||
                           (p.location?.neighborhood === 'Tambaú' && filterBairro === 'Tambau') ||
                           (p.location?.neighborhood === 'Tambau' && filterBairro === 'Tambaú');
       const statusMatch = filterStatus === 'All' ||
-                          (latestSnapshot && latestSnapshot.status === filterStatus);
+                          p.status === filterStatus;
       return bairroMatch && statusMatch;
     });
-  }, [properties, filterBairro, filterStatus]);
+  }, [projects, filterBairro, filterStatus]);
 
   const renderFilterBar = () => (
     <div className="filter-bar">
@@ -209,18 +273,18 @@ function App() {
 
   useEffect(() => {
     if (!user) {
-      setProperties([]);
+      setProjects([]);
       return;
     }
 
-    // Listen to changes in the "properties" collection
-    const propertiesRef = collection(db, 'properties');
-    const unsubscribeProps = onSnapshot(propertiesRef, (snapshot) => {
-      const propertiesData = snapshot.docs.map(doc => ({
+    // Listen to changes in the "projects" collection
+    const projectsRef = collection(db, 'projects');
+    const unsubscribeProps = onSnapshot(projectsRef, (snapshot) => {
+      const projectsData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setProperties(propertiesData);
+      setProjects(projectsData);
     });
 
     // Cleanup subscription on unmount
@@ -432,17 +496,16 @@ function App() {
             Catálogo & Mapa: "Visualize e analise todos os imóveis verificados e processados."
           </div>
           {renderFilterBar()}
-          {filteredProperties.length === 0 ? (
+          {filteredProjects.length === 0 ? (
             <p>Nenhum imóvel encontrado.</p>
           ) : (
             <div className="property-grid">
-              {filteredProperties.map(property => {
+              {filteredProjects.map(project => {
                 return (
-                  <PropertyCard
-                    key={property.id}
-                    property={property}
-                    latestSnapshot={getLatestSnapshot(property)}
-                    onVerifySource={handleVerifySource}
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    onSelectProject={setSelectedProject}
                   />
                 );
               })}
@@ -463,25 +526,19 @@ function App() {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {filteredProperties.filter(p => p.location?.coordinates?.lat && p.location?.coordinates?.lng).map(property => {
-                const latestSnapshot = getLatestSnapshot(property);
-
+              {filteredProjects.filter(p => p.location?.coordinates?.lat && p.location?.coordinates?.lng).map(project => {
                 return (
                   <Marker
-                    key={property.id}
-                    position={[property.location.coordinates.lat, property.location.coordinates.lng]}
-                    icon={createCustomIcon(getLocalizedText(latestSnapshot?.status, language))}
+                    key={project.id}
+                    position={[project.location.coordinates.lat, project.location.coordinates.lng]}
+                    icon={createCustomIcon(project.status || 'pronto')}
                   >
                     <Popup>
-                      <strong>{getLocalizedText(property.basic_info?.title, language) || 'Sem Título'}</strong><br />
-                      {latestSnapshot ? (
-                        <>
-                          Preço: {!latestSnapshot.price_brl ? 'Sob Consulta' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latestSnapshot.price_brl)}<br />
-                          Status: {getLocalizedText(latestSnapshot.status, language) || 'N/A'}<br />
-                        </>
-                      ) : <>Sem preço<br /></> }
-                      {property.ai_context?.investment_roi_estimated_percent != null && (
-                        <span>ROI Estimado: {property.ai_context.investment_roi_estimated_percent}%</span>
+                      <strong>{project.name || 'Sem Título'}</strong><br />
+                      <strong>Construtora:</strong> {project.developer || 'N/A'}<br />
+                      <strong>Status:</strong> {getLocalizedText(project.status, language) || 'N/A'}<br />
+                      {project.ai_context?.investment_roi_estimated_percent != null && (
+                        <span>ROI Estimado: {project.ai_context.investment_roi_estimated_percent}%</span>
                       )}
                     </Popup>
                   </Marker>
@@ -499,16 +556,11 @@ function App() {
                 'Tambaú': { sum: 0, count: 0 } // Handle accent variation
               };
 
-              filteredProperties.forEach(property => {
-                const neighborhood = getLocalizedText(property.location?.neighborhood, language);
+              filteredProjects.forEach(project => {
+                const neighborhood = getLocalizedText(project.location?.neighborhood, language);
                 if (!neighborhood) return;
 
-                const latestSnapshot = getLatestSnapshot(property);
-
-                if (latestSnapshot && latestSnapshot.price_per_m2_brl && latestSnapshot.price_per_m2_brl > 0 && stats[neighborhood]) {
-                  stats[neighborhood].sum += latestSnapshot.price_per_m2_brl;
-                  stats[neighborhood].count += 1;
-                }
+                // Analytics logic will be updated later
               });
 
               const chartData = [
@@ -553,6 +605,14 @@ function App() {
             })()}
           </div>
         </div>
+      )}
+
+      {selectedProject && (
+        <ProjectDetailModal
+          project={selectedProject}
+          onClose={() => setSelectedProject(null)}
+          onVerifySource={handleVerifySource}
+        />
       )}
 
       {isAuditModalOpen && (

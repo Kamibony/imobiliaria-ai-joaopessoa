@@ -3,8 +3,15 @@ import { onRequest } from "firebase-functions/v2/https";
 import { onObjectFinalized } from "firebase-functions/v2/storage";
 import * as admin from "firebase-admin";
 import { VertexAI } from "@google-cloud/vertexai";
-import { PropertySchema } from "./schema";
+import { ProjectSchema, UnitSchema } from "./schema";
 import { fuzzyMatchNeighborhood } from "./utils";
+
+function slugify(text: string) {
+  if (!text) return '';
+  return text.toString().toLowerCase().trim()
+    .replace(/[\s\W-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 import cors = require("cors");
 
 admin.initializeApp();
@@ -52,44 +59,28 @@ export const ingestPdf = onObjectFinalized({
 
   try {
     const prompt = `
-      Leia este Book e Tabela de Preços imobiliários e extraia as unidades disponíveis.
+      Leia este Book e Tabela de Preços imobiliários e extraia os dados do empreendimento e suas unidades.
       O documento é de João Pessoa (bairros como Cabo Branco, Tambaú, Bessa).
 
-      Retorne estritamente um array JSON contendo objetos de imóveis/unidades que se encaixem no seguinte modelo.
-      Para propriedades com múltiplas unidades (ex: apartamentos em um prédio), retorne um array com um objeto para cada unidade extraída.
-      Se for um único imóvel, retorne um array com um único objeto.
+      Retorne estritamente um JSON contendo o empreendimento e a lista de unidades.
 
-      Formato de saída esperado (Array de objetos):
-      [
-        {
-          "id": "identificador_unico_opcional",
-          "basic_info": {
-            "title": "nome do empreendimento / unidade",
-            "developer": "nome da construtora",
-            "delivery_date": "data de entrega ISO 8601 ou null"
-          },
+      Formato de saída esperado (JSON object):
+      {
+        "project": {
+          "name": "nome do empreendimento",
+          "developer": "nome da construtora",
+          "delivery_date": "data de entrega ISO 8601 ou null",
+          "status": "na_planta", // Ou "em_construcao", "pronto", ou null
+          "amenities": ["piscina", "academia"], // array de strings
           "location": {
             "neighborhood": "Cabo Branco", // Ou "Tambau", ou "Bessa"
-            "position_to_sea": "beira_mar", // Ou "quadra_mar", ou "miolo"
+            "position_to_sea": "beira_mar", // Ou "quadra_mar", ou "miolo" ou null
             "distance_to_beach_meters": 100, // numero ou null
             "coordinates": {
               "lat": null,
               "lng": null
             }
           },
-          "features": {
-            "area_m2": 85.5, // área privativa em m2 (numero) ou null
-            "sun_orientation": "nascente", // Ou "nascente_sul", "sul", "poente"
-            "bedrooms": 3 // numero ou null
-          },
-          "snapshots": [
-            {
-              "timestamp": "2024-05-20T12:00:00Z", // data atual
-              "price_brl": 850000, // valor total (numero) ou null
-              "status": "na_planta", // Ou "em_construcao", "pronto",
-              "source": "book_pdf"
-            }
-          ],
           "ai_context": {
             "target_persona": {
               "pt-BR": ["Investidores", "Famílias"],
@@ -101,14 +92,30 @@ export const ingestPdf = onObjectFinalized({
               "en": "Excellent location near the beach."
             }
           }
-        }
-      ]
+        },
+        "units": [
+          {
+            "id": "101A", // opcional, numero da unidade
+            "unit_number": "101A",
+            "area_m2": 85.5, // área privativa em m2 (numero) ou null
+            "bedrooms": 3, // numero ou null
+            "sun_orientation": "nascente", // Ou "nascente_sul", "sul", "poente" ou null
+            "snapshots": [
+              {
+                "timestamp": "2024-05-20T12:00:00Z", // data atual
+                "price_brl": 850000, // valor total (numero) ou null
+                "source": "book_pdf"
+              }
+            ]
+          }
+        ]
+      }
 
       Diretrizes:
       1. Retorne APENAS o JSON puro. Sem formatação markdown (` + "```json" + `).
       2. Defina os campos numéricos (preço, área, quartos) estritamente como nulo (null) se não encontrar a informação. NUNCA use 0 para dados ausentes.
-      3. Extraia o "empreendimento" para basic_info.title, "construtora" para basic_info.developer.
-      4. Extraia as unidades para features.area_m2 e snapshots[0].price_brl.
+      3. Extraia o "empreendimento" para project.name, "construtora" para project.developer.
+      4. Extraia as unidades para units[].area_m2 e units[].snapshots[0].price_brl.
       5. "source" no snapshot deve ser "${filePath}".
     `;
 
@@ -139,120 +146,147 @@ export const ingestPdf = onObjectFinalized({
       throw new Error("Failed to extract data");
     }
 
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error("No JSON array found in response:", responseText);
-      throw new Error("No JSON array found");
+      console.error("No JSON object found in response:", responseText);
+      throw new Error("No JSON object found");
     }
 
     const sanitizedText = jsonMatch[0];
-    let extractedUnits;
+    let extractedData;
 
     try {
-      extractedUnits = JSON.parse(sanitizedText);
+      extractedData = JSON.parse(sanitizedText);
     } catch (parseError) {
       console.error("Failed to parse Gemini response as JSON.", sanitizedText);
       throw new Error("Invalid JSON");
     }
 
-    if (!Array.isArray(extractedUnits)) {
-       console.error("Expected array of units, got something else.");
-       throw new Error("Invalid JSON format from LLM");
+    const projectData = extractedData.project;
+    const extractedUnits = extractedData.units || [];
+
+    if (!projectData || !projectData.name) {
+       console.error("Expected project data with a name.");
+       throw new Error("Invalid JSON format from LLM: Missing project name");
     }
 
-    for (const unit of extractedUnits) {
-      // Validate using Zod schema
-      const validationResult = PropertySchema.safeParse(unit);
-      if (!validationResult.success) {
-        console.error("Schema validation failed for a unit:", validationResult.error);
-        continue; // Skip invalid units
-      }
+    const projectName = projectData.name;
+    const developerName = projectData.developer || "unknown";
+    const projectId = slugify(developerName + "-" + projectName) || db.collection("projects").doc().id;
+    projectData.id = projectId;
 
-      let propertyData = validationResult.data as any;
+    // Coordinate Fallback Logic for Project
+    projectData.needs_geocoding = false;
+    if (projectData.location) {
+      if (projectData.location.coordinates?.lat == null || projectData.location.coordinates?.lng == null) {
+        projectData.needs_geocoding = true;
+        const fuzzyNeighborhood = fuzzyMatchNeighborhood(projectData.location.neighborhood);
 
-      // Deterministically calculate price_per_m2_brl
-      if (propertyData.features?.area_m2 && propertyData.snapshots && propertyData.snapshots.length > 0) {
-          const snapshot = propertyData.snapshots[0];
-          if (snapshot.price_brl) {
-             snapshot.price_per_m2_brl = Math.round(snapshot.price_brl / propertyData.features.area_m2);
-          } else {
-             snapshot.price_per_m2_brl = null;
-          }
-      }
+        // Ensure coordinates object exists
+        projectData.location.coordinates = { lat: null, lng: null };
 
-      // Convert string dates to Date objects
-      if (propertyData.basic_info?.delivery_date) {
-        propertyData.basic_info.delivery_date = new Date(propertyData.basic_info.delivery_date);
-      }
-
-      if (propertyData.snapshots && Array.isArray(propertyData.snapshots)) {
-        propertyData.snapshots.forEach((snap: any) => {
-          if (snap.timestamp) {
-            snap.timestamp = new Date(snap.timestamp);
-          } else {
-            snap.timestamp = new Date();
-          }
-          if (!snap.source || snap.source === "book_pdf") {
-            snap.source = filePath;
-          }
-        });
-      }
-
-      const propertyId = propertyData.id || db.collection("properties").doc().id;
-      propertyData.id = propertyId;
-
-      // Coordinate Fallback Logic
-      propertyData.needs_geocoding = false;
-      if (propertyData.location) {
-        if (propertyData.location.coordinates?.lat == null || propertyData.location.coordinates?.lng == null) {
-          propertyData.needs_geocoding = true;
-          const fuzzyNeighborhood = fuzzyMatchNeighborhood(propertyData.location.neighborhood);
-
-          // Ensure coordinates object exists
-          propertyData.location.coordinates = { lat: null, lng: null };
-
-          if (fuzzyNeighborhood === 'Cabo Branco') {
-            propertyData.location.coordinates.lat = -7.1354;
-            propertyData.location.coordinates.lng = -34.8210;
-          } else if (fuzzyNeighborhood === 'Tambau') {
-            propertyData.location.coordinates.lat = -7.1165;
-            propertyData.location.coordinates.lng = -34.8228;
-          } else if (fuzzyNeighborhood === 'Bessa') {
-            propertyData.location.coordinates.lat = -7.0658;
-            propertyData.location.coordinates.lng = -34.8322;
-          } else {
-             propertyData.location.coordinates.lat = -7.1150;
-             propertyData.location.coordinates.lng = -34.8630;
-          }
+        if (fuzzyNeighborhood === 'Cabo Branco') {
+          projectData.location.coordinates.lat = -7.1354;
+          projectData.location.coordinates.lng = -34.8210;
+        } else if (fuzzyNeighborhood === 'Tambau') {
+          projectData.location.coordinates.lat = -7.1165;
+          projectData.location.coordinates.lng = -34.8228;
+        } else if (fuzzyNeighborhood === 'Bessa') {
+          projectData.location.coordinates.lat = -7.0658;
+          projectData.location.coordinates.lng = -34.8322;
+        } else {
+           projectData.location.coordinates.lat = -7.1150;
+           projectData.location.coordinates.lng = -34.8630;
         }
       }
+    }
 
-      const docRef = db.collection("properties").doc(propertyId);
+    // Validate project
+    const projectValidation = ProjectSchema.safeParse(projectData);
+    if (!projectValidation.success) {
+       console.error("Schema validation failed for project:", projectValidation.error);
+    } else {
+       const docRef = db.collection("projects").doc(projectId);
+       await docRef.set(projectValidation.data, { merge: true });
+       console.log(`Successfully saved project ${projectId}`);
+    }
 
-      await db.runTransaction(async (transaction) => {
-          const docSnap = await transaction.get(docRef);
-          if (docSnap.exists) {
-              const newSnapshots = propertyData.snapshots || [];
-              const existingData = docSnap.data();
-              const existingSnapshots = existingData?.snapshots || [];
-              const mergedSnapshots = [...existingSnapshots, ...newSnapshots];
+    let validUnitsCount = 0;
+    const unitsCollectionRef = db.collection("projects").doc(projectId).collection("units");
 
-              const { snapshots, ...otherData } = propertyData;
-              transaction.set(docRef, { ...otherData, snapshots: mergedSnapshots }, { merge: true });
-          } else {
-              transaction.set(docRef, propertyData);
-          }
-      });
-      console.log(`Successfully processed PDF unit and saved property ${propertyId}`);
+    if (Array.isArray(extractedUnits)) {
+      for (const unit of extractedUnits) {
+        // Validate using Zod schema
+        const validationResult = UnitSchema.safeParse(unit);
+        if (!validationResult.success) {
+          console.error("Schema validation failed for a unit:", validationResult.error);
+          continue; // Skip invalid units
+        }
+
+        let propertyData = validationResult.data as any;
+
+        // Deterministically calculate price_per_m2_brl
+        if (propertyData.area_m2 && propertyData.snapshots && propertyData.snapshots.length > 0) {
+            const snapshot = propertyData.snapshots[0];
+            if (snapshot.price_brl) {
+               snapshot.price_per_m2_brl = Math.round(snapshot.price_brl / propertyData.area_m2);
+            } else {
+               snapshot.price_per_m2_brl = null;
+            }
+        }
+
+        if (propertyData.snapshots && Array.isArray(propertyData.snapshots)) {
+          propertyData.snapshots.forEach((snap: any) => {
+            if (snap.timestamp) {
+              snap.timestamp = new Date(snap.timestamp).toISOString();
+            } else {
+              snap.timestamp = new Date().toISOString();
+            }
+            if (!snap.source || snap.source === "book_pdf") {
+              snap.source = filePath;
+            }
+          });
+        }
+
+        const unitId = propertyData.id || propertyData.unit_number || unitsCollectionRef.doc().id;
+        propertyData.id = unitId;
+
+        const unitDocRef = unitsCollectionRef.doc(unitId);
+
+        await db.runTransaction(async (transaction) => {
+            const docSnap = await transaction.get(unitDocRef);
+            if (docSnap.exists) {
+                const newSnapshots = propertyData.snapshots || [];
+                const existingData = docSnap.data();
+                const existingSnapshots = existingData?.snapshots || [];
+                const mergedSnapshots = [...existingSnapshots, ...newSnapshots];
+
+                const { snapshots, ...otherData } = propertyData;
+                transaction.set(unitDocRef, { ...otherData, snapshots: mergedSnapshots }, { merge: true });
+            } else {
+                transaction.set(unitDocRef, propertyData);
+            }
+        });
+        console.log(`Successfully processed PDF unit and saved unit ${unitId} for project ${projectId}`);
+        validUnitsCount++;
+      }
     }
 
     if (fileName) {
       try {
-        await db.collection("pdf_jobs").doc(fileName).update({
-          status: "Success",
-        });
+        if (extractedUnits.length > 0 && validUnitsCount === 0) {
+            await db.collection("pdf_jobs").doc(fileName).update({
+              status: "Failed",
+              error: "Schema validation failed for all extracted units. 0 units saved.",
+            });
+        } else {
+            await db.collection("pdf_jobs").doc(fileName).update({
+              status: "Success",
+              extracted_count: validUnitsCount,
+            });
+        }
       } catch (e) {
-        console.log("Could not update pdf_jobs to Success, moving on...", e);
+        console.log("Could not update pdf_jobs, moving on...", e);
       }
     }
 
