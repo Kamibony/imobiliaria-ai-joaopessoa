@@ -3,7 +3,7 @@ service firebase.storage {
   match /b/{bucket}/o {
     
     // Secure B2B PDF uploads
-    match /b2b_pdfs/{pdfId} {
+    match /b2b_pdfs/{allPaths=**} {
       // Allow upload if:
       // 1. User is authenticated (requires custom token setup or standard Firebase Auth)
       // 2. File size is under 50MB
