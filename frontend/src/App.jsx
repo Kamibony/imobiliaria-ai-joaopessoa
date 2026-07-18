@@ -1,8 +1,9 @@
 import ErrorBoundary from './ErrorBoundary';
 import { LanguageProvider, useLanguage, getLocalizedText } from './LanguageContext';
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
+import { getStorage, ref, getDownloadURL } from 'firebase/storage'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import L from 'leaflet'
@@ -11,7 +12,7 @@ import { db, auth } from './firebase'
 import PDFUploader from './components/PDFUploader';
 import './App.css'
 
-const PropertyCard = ({ property, latestSnapshot }) => {
+const PropertyCard = ({ property, latestSnapshot, onVerifySource }) => {
   const { language } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const aiContext = property.ai_context;
@@ -33,9 +34,20 @@ const PropertyCard = ({ property, latestSnapshot }) => {
         <p><em>Sem dados financeiros/status no momento</em></p>
       )}
 
-      <button className="expand-btn" onClick={() => setIsExpanded(!isExpanded)}>
-        {isExpanded ? 'Ocultar Detalhes' : 'Ver Detalhes'}
-      </button>
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+        <button className="expand-btn" style={{ marginTop: 0 }} onClick={() => setIsExpanded(!isExpanded)}>
+          {isExpanded ? 'Ocultar Detalhes' : 'Ver Detalhes'}
+        </button>
+        {latestSnapshot && latestSnapshot.source && (
+          <button
+            className="expand-btn"
+            style={{ marginTop: 0, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}
+            onClick={() => onVerifySource(latestSnapshot.source)}
+          >
+            🔍 Verificar Fonte
+          </button>
+        )}
+      </div>
 
       {isExpanded && (
         <div className="expanded-details">
@@ -97,15 +109,12 @@ function App() {
   const [authError, setAuthError] = useState('')
 
   const [activeTab, setActiveTab] = useState('upload')
-    const [data, setData] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
   const [properties, setProperties] = useState([])
-  const [targetUrls, setTargetUrls] = useState([])
-  const [newUrl, setNewUrl] = useState('')
-  const [urlMessage, setUrlMessage] = useState('')
-
   const [pdfJobs, setPdfJobs] = useState([]);
+
+  const [auditSourceUrl, setAuditSourceUrl] = useState(null)
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
+  const [auditLoading, setAuditLoading] = useState(false)
 
   const [filterBairro, setFilterBairro] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
@@ -201,7 +210,6 @@ function App() {
   useEffect(() => {
     if (!user) {
       setProperties([]);
-      setTargetUrls([]);
       return;
     }
 
@@ -215,69 +223,11 @@ function App() {
       setProperties(propertiesData);
     });
 
-    // Listen to changes in the "TargetURLs" collection
-    const targetUrlsRef = collection(db, 'TargetURLs');
-    const unsubscribeUrls = onSnapshot(targetUrlsRef, (snapshot) => {
-      const urlsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setTargetUrls(urlsData);
-    });
-
-    // Listen to changes in the "DiscoverySources" collection
-    const discoverySourcesRef = collection(db, 'DiscoverySources');
-    const unsubscribeSources = onSnapshot(discoverySourcesRef, (snapshot) => {
-      const sourcesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setDiscoverySources(sourcesData);
-    });
-
-    // Listen to changes in the "ReviewInbox" collection
-    const reviewInboxRef = collection(db, 'ReviewInbox');
-    const unsubscribeInbox = onSnapshot(reviewInboxRef, (snapshot) => {
-      const inboxData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setTriageItems(inboxData.filter(item => item.status === 'PENDING'));
-    });
-
     // Cleanup subscription on unmount
     return () => {
       unsubscribeProps();
-      unsubscribeUrls();
-      unsubscribeSources();
-      unsubscribeInbox();
     };
   }, [user]);
-
-  const handleAddUrl = async (e) => {
-    e.preventDefault();
-    setUrlMessage('');
-    if (!newUrl) return;
-
-    try {
-      const normalizedUrl = newUrl.trim().replace(/\/$/, "");
-      await addDoc(collection(db, 'TargetURLs'), { url: normalizedUrl });
-      setNewUrl('');
-      setUrlMessage('URL adicionada com sucesso!');
-    } catch (err) {
-      console.error(err);
-      setUrlMessage('Erro ao adicionar URL.');
-    }
-  };
-
-  const handleDeleteUrl = async (id) => {
-    try {
-      await deleteDoc(doc(db, 'TargetURLs', id));
-    } catch (err) {
-      console.error(err);
-      setUrlMessage('Erro ao deletar URL.');
-    }
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -298,116 +248,27 @@ function App() {
     }
   };
 
-  const handleAddSource = async (e) => {
-    e.preventDefault();
-    setSourceMessage('');
+  const handleVerifySource = async (sourcePath) => {
     try {
-      const normalizedSource = newSource.trim().replace(/\/$/, "");
-
-      if (discoverySources.some(s => s.source === normalizedSource)) {
-        setSourceMessage('Erro: Esta fonte já está cadastrada.');
-        return;
-      }
-
-      await addDoc(collection(db, 'DiscoverySources'), { source: normalizedSource, type: 'URL' });
-      setNewSource('');
-      setSourceMessage('Sucesso: Fonte adicionada com sucesso.');
+      setAuditLoading(true);
+      setIsAuditModalOpen(true);
+      const storage = getStorage();
+      const fileRef = ref(storage, `b2b_pdfs/${sourcePath}`);
+      const downloadURL = await getDownloadURL(fileRef);
+      setAuditSourceUrl(downloadURL);
     } catch (error) {
-      console.error("Error adding source:", error);
-      setSourceMessage('Erro ao adicionar fonte.');
-    }
-  };
-
-  const handleDeleteSource = async (id) => {
-    try {
-      await deleteDoc(doc(db, 'DiscoverySources', id));
-    } catch (error) {
-      console.error("Error deleting source:", error);
-    }
-  };
-
-  const handleTriageAction = async (item, action) => {
-    setTriageMessage('');
-    let token = '';
-    try {
-      token = await auth.currentUser.getIdToken();
-    } catch (e) {
-      setTriageMessage('Erro de autenticação: Não foi possível obter o token.');
-      return;
-    }
-    setTriageMessage('Processando...');
-    try {
-      const response = await fetch('https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/processTriageAction', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          id: item.id,
-          action: action,
-          type: item.type,
-          url: item.url,
-          new_hash: item.new_hash,
-          raw_text: item.raw_text,
-          image_base64: item.image_base64
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      setTriageMessage(`Sucesso: Ação ${action} processada para ${item.url}`);
-    } catch (error) {
-      console.error("Error processing triage action:", error);
-      setTriageMessage(`Erro ao processar ação ${action}. Verifique o token.`);
-    }
-  };
-
-  const handleAnalyzeAndSave = async () => {
-    let token = '';
-    try {
-      token = await auth.currentUser.getIdToken();
-    } catch (e) {
-      setMessage('Erro de autenticação: Não foi possível obter o token.');
-      return;
-    }
-if (!data) {
-      setMessage('Por favor, forneça os dados do imóvel.')
-      return
-    }
-
-    setLoading(true)
-    setMessage('')
-
-    try {
-      const url = 'https://us-central1-imobiliaria-ai-joaopessoa.cloudfunctions.net/ingestPropertyData'
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ data })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setMessage(`Sucesso: ${result.message} (ID: ${result.propertyId})`)
-        setData('') // clear data on success
-      } else {
-        const errorText = await response.text()
-        setMessage(`Erro: ${response.status} - ${errorText}`)
-      }
-    } catch (err) {
-      console.error(err)
-      setMessage(`Erro: ${err.message}`)
+      console.error("Error fetching PDF URL:", error);
+      alert("Não foi possível carregar o arquivo fonte. Ele pode ter sido removido.");
+      setIsAuditModalOpen(false);
     } finally {
-      setLoading(false)
+      setAuditLoading(false);
     }
-  }
+  };
+
+  const closeAuditModal = () => {
+    setIsAuditModalOpen(false);
+    setAuditSourceUrl(null);
+  };
 
   if (authLoading) {
     return <div className="admin-container"><p>Carregando...</p></div>;
@@ -469,12 +330,6 @@ if (!data) {
         >
           Catálogo & Mapa
         </button>
-        <button
-          className={`tab-btn ${activeTab === 'acoes-manuais' ? 'active' : ''}`}
-          onClick={() => setActiveTab('acoes-manuais')}
-        >
-          Ações Manuais
-        </button>
       </div>
 
       {activeTab === 'upload' && (
@@ -503,114 +358,70 @@ if (!data) {
                 </thead>
                 <tbody>
                   {pdfJobs.map(job => (
-                    <tr key={job.id} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: '10px', wordBreak: 'break-all' }}>{job.fileName}</td>
-                      <td style={{ padding: '10px' }}>
-                        <span style={{
-                          padding: '4px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.85em',
-                          fontWeight: 'bold',
-                          backgroundColor: job.status === 'Success' ? '#d4edda' :
-                                           job.status === 'Processing' ? '#fff3cd' :
-                                           job.status === 'Failed' ? '#f8d7da' : '#e2e3e5',
-                          color: job.status === 'Success' ? '#155724' :
-                                 job.status === 'Processing' ? '#856404' :
-                                 job.status === 'Failed' ? '#721c24' : '#383d41'
-                        }}>
-                          {job.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '0.9em' }}>
-                        {job.uploadedAt?.toDate ? job.uploadedAt.toDate().toLocaleString() : 'N/A'}
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '0.9em', color: '#dc3545' }}>
-                        {job.error || '-'}
-                      </td>
-                    </tr>
+                    <React.Fragment key={job.id}>
+                      <tr style={{ borderBottom: job.status === 'Success' && job.stats ? 'none' : '1px solid #eee' }}>
+                        <td style={{ padding: '10px', wordBreak: 'break-all' }}>{job.fileName}</td>
+                        <td style={{ padding: '10px' }}>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.85em',
+                            fontWeight: 'bold',
+                            backgroundColor: job.status === 'Success' ? '#d4edda' :
+                                             job.status === 'Processing' ? '#fff3cd' :
+                                             job.status === 'Failed' ? '#f8d7da' : '#e2e3e5',
+                            color: job.status === 'Success' ? '#155724' :
+                                   job.status === 'Processing' ? '#856404' :
+                                   job.status === 'Failed' ? '#721c24' : '#383d41'
+                          }}>
+                            {job.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '0.9em' }}>
+                          {job.uploadedAt?.toDate ? job.uploadedAt.toDate().toLocaleString() : 'N/A'}
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '0.9em', color: '#dc3545' }}>
+                          {job.error || '-'}
+                        </td>
+                      </tr>
+                      {job.status === 'Success' && job.stats && (
+                        <tr style={{ borderBottom: '1px solid #eee' }}>
+                          <td colSpan="4" style={{ padding: '0 10px 15px 10px' }}>
+                            <div style={{
+                              display: 'flex', gap: '1rem', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+                              padding: '1rem', borderRadius: '8px', color: '#166534', fontSize: '0.9em'
+                            }}>
+                              <div style={{ flex: 1, textAlign: 'center' }}>
+                                <div style={{ fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#15803d' }}>Unidades Extraídas</div>
+                                <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{job.stats.total_units || 0}</div>
+                              </div>
+                              <div style={{ width: '1px', backgroundColor: '#bbf7d0' }}></div>
+                              <div style={{ flex: 1, textAlign: 'center' }}>
+                                <div style={{ fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#15803d' }}>VGV Estimado</div>
+                                <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
+                                  {job.stats.total_inventory_value
+                                    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(job.stats.total_inventory_value)
+                                    : 'N/A'}
+                                </div>
+                              </div>
+                              <div style={{ width: '1px', backgroundColor: '#bbf7d0' }}></div>
+                              <div style={{ flex: 1, textAlign: 'center' }}>
+                                <div style={{ fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#15803d' }}>Preço Médio / m²</div>
+                                <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
+                                  {job.stats.avg_price_per_m2
+                                    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(job.stats.avg_price_per_m2)
+                                    : 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
             )}
-          </div>
-        </>
-      )}
-
-      {activeTab === 'acoes-manuais' && (
-        <>
-          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
-            Ações Manuais: Use ferramentas para forçar extrações manuais de URLs e textos brutos.
-          </div>
-          <div className="card" style={{ marginBottom: '2rem' }}>
-            <h2>Ingestão de Dados (Upload Manual)</h2>
-            <div className="form-group">
-              <label htmlFor="data">Dados Desestruturados do Imóvel</label>
-              <textarea
-                id="data"
-                placeholder="Cole aqui o texto bruto de PPT, PDF, WhatsApp ou sites..."
-                value={data}
-                onChange={(e) => setData(e.target.value)}
-                rows={10}
-              />
-            </div>
-
-            <button
-              onClick={handleAnalyzeAndSave}
-              disabled={loading}
-              className="submit-btn"
-            >
-              {loading ? 'Analisando e Salvando...' : 'Analisar e Salvar'}
-            </button>
-
-            {message && (
-              <div className={`message ${message.startsWith('Sucesso') ? 'success' : 'error'}`}>
-                {message}
-              </div>
-            )}
-          </div>
-
-          <div className="card">
-            <h2>Gerenciar URLs Alvo</h2>
-
-            <form onSubmit={handleAddUrl} style={{ marginBottom: '2rem' }}>
-              <div className="form-group">
-                <label htmlFor="newUrl">Adicionar Nova URL</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input
-                    type="url"
-                    id="newUrl"
-                    placeholder="https://exemplo.com"
-                    value={newUrl}
-                    onChange={(e) => setNewUrl(e.target.value)}
-                    required
-                    style={{ flexGrow: 1 }}
-                  />
-                  <button type="submit" className="submit-btn" style={{ marginTop: 0, width: 'auto' }}>Adicionar</button>
-                </div>
-              </div>
-              {urlMessage && <div className={`message ${urlMessage.includes('Erro') ? 'error' : 'success'}`}>{urlMessage}</div>}
-            </form>
-
-            <div style={{ textAlign: 'left' }}>
-              <h3>URLs Cadastradas</h3>
-              {targetUrls.length === 0 ? (
-                <p>Nenhuma URL cadastrada.</p>
-              ) : (
-                <ul style={{ listStyleType: 'none', padding: 0 }}>
-                  {targetUrls.map((target) => (
-                    <li key={target.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #ccc' }}>
-                      <span style={{ wordBreak: 'break-all', marginRight: '1rem' }}>{target.url}</span>
-                      <button
-                        onClick={() => handleDeleteUrl(target.id)}
-                        style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                      >
-                        Deletar
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
         </>
       )}
@@ -627,7 +438,12 @@ if (!data) {
             <div className="property-grid">
               {filteredProperties.map(property => {
                 return (
-                  <PropertyCard key={property.id} property={property} latestSnapshot={getLatestSnapshot(property)} />
+                  <PropertyCard
+                    key={property.id}
+                    property={property}
+                    latestSnapshot={getLatestSnapshot(property)}
+                    onVerifySource={handleVerifySource}
+                  />
                 );
               })}
             </div>
@@ -709,16 +525,52 @@ if (!data) {
               return (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis tickFormatter={(value) => `R$ ${value}`} />
-                    <Tooltip formatter={(value) => [`R$ ${value}`, 'Média (R$/m²)']} />
-                    <Legend />
-                    <Bar dataKey="Media" fill="#8884d8" name="Média (R$/m²)" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 14 }} dy={10} />
+                    <YAxis
+                      tickFormatter={(value) => `R$ ${value}`}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#6b7280', fontSize: 14 }}
+                      dx={-10}
+                    />
+                    <Tooltip
+                      formatter={(value) => [`R$ ${value}`, 'Média (R$/m²)']}
+                      cursor={{ fill: '#f3f4f6' }}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar
+                      dataKey="Media"
+                      fill="#4F46E5"
+                      name="Média (R$/m²)"
+                      radius={[6, 6, 0, 0]}
+                      activeBar={{ stroke: '#4338ca', strokeWidth: 2 }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {isAuditModalOpen && (
+        <div className="audit-modal">
+          <div className="audit-modal-content">
+            <div className="audit-modal-header">
+              <h2>X-Ray Audit Mode</h2>
+              <button onClick={closeAuditModal} className="close-btn">✕</button>
+            </div>
+            <div className="audit-modal-body">
+              {auditLoading ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Carregando documento original...</div>
+              ) : auditSourceUrl ? (
+                <iframe src={auditSourceUrl} title="PDF Source X-Ray" width="100%" height="100%" style={{ border: 'none', backgroundColor: '#333' }} />
+              ) : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Erro ao carregar documento.</div>
+              )}
+            </div>
           </div>
         </div>
       )}
