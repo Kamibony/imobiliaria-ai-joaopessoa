@@ -96,7 +96,7 @@ function App() {
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
 
-  const [activeTab, setActiveTab] = useState('discovery')
+  const [activeTab, setActiveTab] = useState('upload')
     const [data, setData] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -105,12 +105,7 @@ function App() {
   const [newUrl, setNewUrl] = useState('')
   const [urlMessage, setUrlMessage] = useState('')
 
-  const [discoverySources, setDiscoverySources] = useState([]);
-  const [newSource, setNewSource] = useState('');
-  const [sourceMessage, setSourceMessage] = useState('');
-
-  const [triageItems, setTriageItems] = useState([]);
-  const [triageMessage, setTriageMessage] = useState('');
+  const [pdfJobs, setPdfJobs] = useState([]);
 
   const [filterBairro, setFilterBairro] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
@@ -187,6 +182,21 @@ function App() {
     });
     return () => unsubscribeAuth();
   }, []);
+
+  useEffect(() => {
+    const jobsRef = collection(db, 'pdf_jobs')
+    const unsubscribe = onSnapshot(jobsRef, (snapshot) => {
+      const jobsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      // Sort jobs by uploadedAt descending
+      jobsData.sort((a, b) => {
+         const dateA = a.uploadedAt?.toDate ? a.uploadedAt.toDate() : new Date(a.uploadedAt || 0);
+         const dateB = b.uploadedAt?.toDate ? b.uploadedAt.toDate() : new Date(b.uploadedAt || 0);
+         return dateB - dateA;
+      });
+      setPdfJobs(jobsData)
+    })
+    return () => unsubscribe()
+  }, [])
 
   useEffect(() => {
     if (!user) {
@@ -448,16 +458,10 @@ if (!data) {
 
       <div className="tabs">
         <button
-          className={`tab-btn ${activeTab === 'discovery' ? 'active' : ''}`}
-          onClick={() => setActiveTab('discovery')}
+          className={`tab-btn ${activeTab === 'upload' ? 'active' : ''}`}
+          onClick={() => setActiveTab('upload')}
         >
-          Radar de Mercado
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'triage' ? 'active' : ''}`}
-          onClick={() => setActiveTab('triage')}
-        >
-          Caixa de Entrada
+          Upload B2B PDF
         </button>
         <button
           className={`tab-btn ${activeTab === 'catalogo-mapa' ? 'active' : ''}`}
@@ -473,13 +477,69 @@ if (!data) {
         </button>
       </div>
 
-      {activeTab === 'acoes-manuais' && (
+      {activeTab === 'upload' && (
         <>
           <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
-            Ações Manuais: Faça upload de PDFs B2B ou use ferramentas para forçar extrações manuais de URLs e textos brutos.
+            Upload B2B PDF: Faça upload de Tabelas de Preço ou Books B2B para ingestão automatizada na base de dados.
           </div>
           <div className="card" style={{ marginBottom: '2rem' }}>
             <PDFUploader />
+          </div>
+
+          <div className="card">
+            <h2>Pipeline Monitor</h2>
+            <p>Acompanhe o status de extração de dados dos documentos PDF enviados.</p>
+            {pdfJobs.length === 0 ? (
+              <p style={{ color: '#666', fontStyle: 'italic' }}>Nenhum upload registrado.</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f4f4f4', borderBottom: '2px solid #ddd' }}>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Documento</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Status</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Upload em</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Erro (se houver)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pdfJobs.map(job => (
+                    <tr key={job.id} style={{ borderBottom: '1px solid #eee' }}>
+                      <td style={{ padding: '10px', wordBreak: 'break-all' }}>{job.fileName}</td>
+                      <td style={{ padding: '10px' }}>
+                        <span style={{
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.85em',
+                          fontWeight: 'bold',
+                          backgroundColor: job.status === 'Success' ? '#d4edda' :
+                                           job.status === 'Processing' ? '#fff3cd' :
+                                           job.status === 'Failed' ? '#f8d7da' : '#e2e3e5',
+                          color: job.status === 'Success' ? '#155724' :
+                                 job.status === 'Processing' ? '#856404' :
+                                 job.status === 'Failed' ? '#721c24' : '#383d41'
+                        }}>
+                          {job.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px', fontSize: '0.9em' }}>
+                        {job.uploadedAt?.toDate ? job.uploadedAt.toDate().toLocaleString() : 'N/A'}
+                      </td>
+                      <td style={{ padding: '10px', fontSize: '0.9em', color: '#dc3545' }}>
+                        {job.error || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'acoes-manuais' && (
+        <>
+          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
+            Ações Manuais: Use ferramentas para forçar extrações manuais de URLs e textos brutos.
           </div>
           <div className="card" style={{ marginBottom: '2rem' }}>
             <h2>Ingestão de Dados (Upload Manual)</h2>
@@ -575,148 +635,6 @@ if (!data) {
         </div>
       )}
 
-      {activeTab === 'discovery' && (
-        <div className="card">
-          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
-            Radar de Mercado: "Adicione os sites principais das construtoras. O robô monitorará essas fontes diariamente em busca de novos empreendimentos."
-          </div>
-          <h2>Fontes de Descoberta (Seed Domains)</h2>
-          <p>Adicione URLs base para o Spider explorar (ex: massai.com.br/empreendimentos). O AI irá varrer e enviar possíveis novos projetos para o Triage Center.</p>
-          <form onSubmit={handleAddSource} style={{ marginBottom: '2rem' }}>
-            <div className="form-group">
-              <label htmlFor="newSource">Adicionar Nova Fonte</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="url"
-                  id="newSource"
-                  placeholder="https://exemplo.com/imoveis"
-                  value={newSource}
-                  onChange={(e) => setNewSource(e.target.value)}
-                  required
-                  style={{ flexGrow: 1 }}
-                />
-                <button type="submit" className="submit-btn" style={{ marginTop: 0, width: 'auto' }}>Adicionar</button>
-              </div>
-            </div>
-            {sourceMessage && <div className={`message ${sourceMessage.includes('Erro') ? 'error' : 'success'}`}>{sourceMessage}</div>}
-          </form>
-
-          <div style={{ textAlign: 'left' }}>
-            <h3>Fontes Cadastradas</h3>
-            {discoverySources.length === 0 ? (
-              <p>Nenhuma fonte cadastrada.</p>
-            ) : (
-              <ul style={{ listStyleType: 'none', padding: 0 }}>
-                {discoverySources.map((source) => (
-                  <li key={source.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #ccc' }}>
-                    <span style={{ wordBreak: 'break-all', marginRight: '1rem' }}>{source.source}</span>
-                    <button
-                      onClick={() => handleDeleteSource(source.id)}
-                      style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      Deletar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'triage' && (
-        <div className="card" style={{ width: '100%', maxWidth: '1000px' }}>
-          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
-            Caixa de Entrada: "Avalie as descobertas da IA. Aprovar um item iniciará a extração profunda de dados de forma automática."
-          </div>
-          <h2>HITL Triage Center (Review Inbox)</h2>
-          <p>Revise novas descobertas e mudanças detectadas antes de processá-las.</p>
-
-
-
-          {triageMessage && <div className={`message ${triageMessage.includes('Erro') ? 'error' : 'success'}`}>{triageMessage}</div>}
-
-          <div style={{ display: 'flex', gap: '2rem', marginTop: '2rem', flexDirection: 'column' }}>
-
-            {/* Queue A: Discoveries */}
-            <div style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px' }}>
-              <h3 style={{ color: '#2a5298', marginTop: 0 }}>Queue A: Novas Descobertas (Discovery)</h3>
-              {triageItems.filter(i => i.type === 'DISCOVERY').length === 0 ? (
-                <p>Nenhuma nova descoberta pendente.</p>
-              ) : (
-                <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
-                  {triageItems.filter(i => i.type === 'DISCOVERY').map((item) => (
-                    <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0', borderBottom: '1px solid #eee' }}>
-                      <div style={{ wordBreak: 'break-all', marginRight: '1rem', flexGrow: 1 }}>
-                        <a href={item.url} target="_blank" rel="noreferrer" style={{ fontWeight: 'bold' }}>{item.url}</a>
-                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}>
-                          Detectado em: {item.created_at?.toDate().toLocaleString() || 'N/A'}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button
-                          onClick={() => handleTriageAction(item, 'APPROVE')}
-                          style={{ backgroundColor: '#28a745', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                          Aprovar (Deep Scan)
-                        </button>
-                        <button
-                          onClick={() => handleTriageAction(item, 'DISCARD')}
-                          style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                          Descartar
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* Queue B: Changes */}
-            <div style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px' }}>
-              <h3 style={{ color: '#d35400', marginTop: 0 }}>Queue B: Mudanças Detectadas (Temporal Memory)</h3>
-              {triageItems.filter(i => i.type === 'CHANGE').length === 0 ? (
-                <p>Nenhuma mudança pendente.</p>
-              ) : (
-                <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
-                  {triageItems.filter(i => i.type === 'CHANGE').map((item) => (
-                    <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '1rem 0', borderBottom: '1px solid #eee' }}>
-                      <div style={{ wordBreak: 'break-all', marginRight: '1rem', flexGrow: 1 }}>
-                        <a href={item.url} target="_blank" rel="noreferrer" style={{ fontWeight: 'bold' }}>{item.url}</a>
-                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}>
-                          Novo Hash: {item.new_hash?.substring(0, 8)}...<br/>
-                          Detectado em: {item.created_at?.toDate().toLocaleString() || 'N/A'}
-                        </div>
-                        {item.image_base64 && (
-                          <div style={{ marginTop: '0.5rem' }}>
-                            <span style={{ fontSize: '0.8rem', backgroundColor: '#eee', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>Screenshot Anexada</span>
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                         <button
-                          onClick={() => handleTriageAction(item, 'APPROVE')}
-                          style={{ backgroundColor: '#28a745', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                          Aprovar (Atualizar Histórico)
-                        </button>
-                        <button
-                          onClick={() => handleTriageAction(item, 'DISCARD')}
-                          style={{ backgroundColor: '#dc3545', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                          Descartar (Falso Positivo)
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
 
 
 
