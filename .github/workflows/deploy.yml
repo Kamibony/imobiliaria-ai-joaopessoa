@@ -59,7 +59,7 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Deploy to Firebase Functions, Hosting, and Firestore
-        run: firebase deploy --only functions,hosting,firestore --project imobiliaria-ai-joaopessoa --force --non-interactive
+      - name: Deploy to Firebase Functions, Hosting, Firestore, and Storage
+        run: firebase deploy --only functions,hosting,firestore,storage --project imobiliaria-ai-joaopessoa --force --non-interactive
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}

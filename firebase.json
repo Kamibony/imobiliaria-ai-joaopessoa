@@ -3,6 +3,9 @@
     "rules": "frontend/firestore.rules",
     "indexes": "frontend/firestore.indexes.json"
   },
+  "storage": {
+    "rules": "frontend/storage.rules"
+  },
   "functions": [
     {
       "source": "backend",
