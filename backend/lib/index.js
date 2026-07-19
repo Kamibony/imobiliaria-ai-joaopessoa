@@ -196,7 +196,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         if (projectData.location) {
             if (projectData.location.coordinates?.lat == null || projectData.location.coordinates?.lng == null) {
                 projectData.needs_geocoding = true;
-                const fuzzyNeighborhood = (0, utils_1.fuzzyMatchNeighborhood)(projectData.location.neighborhood);
+                const fuzzyNeighborhood = projectData.location.neighborhood ? (0, utils_1.fuzzyMatchNeighborhood)(projectData.location.neighborhood) : null;
                 // Ensure coordinates object exists
                 projectData.location.coordinates = { lat: null, lng: null };
                 if (fuzzyNeighborhood === 'Cabo Branco') {
@@ -219,6 +219,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         }
         // Validate project
         const projectValidation = schema_1.ProjectSchema.safeParse(projectData);
+        let projectSaved = false;
         if (!projectValidation.success) {
             console.error("Schema validation failed for project:", projectValidation.error);
         }
@@ -226,6 +227,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
             const docRef = db.collection("projects").doc(projectId);
             await docRef.set(projectValidation.data, { merge: true });
             console.log(`Successfully saved project ${projectId}`);
+            projectSaved = true;
         }
         let validUnitsCount = 0;
         const unitsCollectionRef = db.collection("projects").doc(projectId).collection("units");
@@ -282,12 +284,21 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
                 validUnitsCount++;
             }
         }
+        if (validUnitsCount > 0) {
+            try {
+                const docRef = db.collection("projects").doc(projectId);
+                await docRef.set({ has_units: true }, { merge: true });
+            }
+            catch (e) {
+                console.log("Could not update project has_units flag", e);
+            }
+        }
         if (fileName) {
             try {
-                if (extractedUnits.length > 0 && validUnitsCount === 0) {
+                if (!projectSaved && validUnitsCount === 0) {
                     await db.collection("pdf_jobs").doc(fileName).update({
                         status: "Failed",
-                        error: "Schema validation failed for all extracted units. 0 units saved.",
+                        error: "Schema validation failed for both project and units. Nothing saved.",
                     });
                 }
                 else {
