@@ -6,12 +6,6 @@ import { VertexAI } from "@google-cloud/vertexai";
 import { ProjectSchema, UnitSchema } from "./schema";
 import { fuzzyMatchNeighborhood } from "./utils";
 
-function slugify(text: string) {
-  if (!text) return '';
-  return text.toString().toLowerCase().trim()
-    .replace(/[\s\W-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
 import cors = require("cors");
 
 admin.initializeApp();
@@ -58,15 +52,33 @@ export const ingestPdf = onObjectFinalized({
   }
 
   try {
+    const projectsSnapshot = await db.collection("projects").get();
+    const existingProjects = projectsSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name,
+        developer: data.developer
+      };
+    });
+
     const prompt = `
       Leia este Book e Tabela de Preços imobiliários e extraia os dados do empreendimento e suas unidades.
       O documento é de João Pessoa (bairros como Cabo Branco, Tambaú, Bessa).
+
+      Here is a list of existing real estate projects currently registered in our database:
+      ${JSON.stringify(existingProjects)}
+
+      Your Task: Analyze the text, location, and metadata of the uploaded PDF. Determine if this document corresponds to one of the existing projects listed above (even if fields like the developer name are missing, abbreviated, or formatted differently in this specific PDF).
+      - If it matches an existing project, return that project's exact "id" inside the "project" object in your JSON response.
+      - If it is a brand-new project that does not match any entry, return null for the "id", and the system will generate a fresh unique identifier.
 
       Retorne estritamente um JSON contendo o empreendimento e a lista de unidades.
 
       Formato de saída esperado (JSON object):
       {
         "project": {
+          "id": "exact-id-from-list-or-null",
           "name": "nome do empreendimento",
           "developer": "nome da construtora",
           "delivery_date": "data de entrega ISO 8601 ou null",
@@ -170,9 +182,7 @@ export const ingestPdf = onObjectFinalized({
        throw new Error("Invalid JSON format from LLM: Missing project name");
     }
 
-    const projectName = projectData.name;
-    const developerName = projectData.developer || "unknown";
-    const projectId = slugify(developerName + "-" + projectName) || db.collection("projects").doc().id;
+    const projectId = projectData.id || db.collection("projects").doc().id;
     projectData.id = projectId;
 
     // Coordinate Fallback Logic for Project
