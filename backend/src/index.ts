@@ -180,7 +180,7 @@ export const ingestPdf = onObjectFinalized({
     if (projectData.location) {
       if (projectData.location.coordinates?.lat == null || projectData.location.coordinates?.lng == null) {
         projectData.needs_geocoding = true;
-        const fuzzyNeighborhood = fuzzyMatchNeighborhood(projectData.location.neighborhood);
+        const fuzzyNeighborhood = projectData.location.neighborhood ? fuzzyMatchNeighborhood(projectData.location.neighborhood) : null;
 
         // Ensure coordinates object exists
         projectData.location.coordinates = { lat: null, lng: null };
@@ -203,12 +203,14 @@ export const ingestPdf = onObjectFinalized({
 
     // Validate project
     const projectValidation = ProjectSchema.safeParse(projectData);
+    let projectSaved = false;
     if (!projectValidation.success) {
        console.error("Schema validation failed for project:", projectValidation.error);
     } else {
        const docRef = db.collection("projects").doc(projectId);
        await docRef.set(projectValidation.data, { merge: true });
        console.log(`Successfully saved project ${projectId}`);
+       projectSaved = true;
     }
 
     let validUnitsCount = 0;
@@ -272,12 +274,21 @@ export const ingestPdf = onObjectFinalized({
       }
     }
 
+    if (validUnitsCount > 0) {
+       try {
+           const docRef = db.collection("projects").doc(projectId);
+           await docRef.set({ has_units: true }, { merge: true });
+       } catch (e) {
+           console.log("Could not update project has_units flag", e);
+       }
+    }
+
     if (fileName) {
       try {
-        if (extractedUnits.length > 0 && validUnitsCount === 0) {
+        if (!projectSaved && validUnitsCount === 0) {
             await db.collection("pdf_jobs").doc(fileName).update({
               status: "Failed",
-              error: "Schema validation failed for all extracted units. 0 units saved.",
+              error: "Schema validation failed for both project and units. Nothing saved.",
             });
         } else {
             await db.collection("pdf_jobs").doc(fileName).update({

@@ -59,7 +59,7 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource }) => {
               <p><strong>Bairro:</strong> {getLocalizedText(project.location?.neighborhood, language) || 'N/A'}</p>
               <p><strong>Status:</strong> {getLocalizedText(project.status, language) || 'N/A'}</p>
               <p><strong>Entrega:</strong> {project.delivery_date ? new Date(project.delivery_date).toLocaleDateString() : 'N/A'}</p>
-              {project.amenities && project.amenities.length > 0 && (
+              {Array.isArray(project.amenities) && project.amenities.length > 0 && (
                 <p><strong>Comodidades:</strong> {project.amenities.join(', ')}</p>
               )}
             </div>
@@ -142,12 +142,31 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource }) => {
 
 const ProjectCard = ({ project, onSelectProject }) => {
   const { language } = useLanguage();
+
+  const hasBookData = project.amenities?.length > 0 || project.ai_context?.investment_roi_estimated_percent != null;
+  const hasTabelaData = !!project.has_units;
+
   return (
     <div className="property-card" style={{ cursor: 'pointer' }} onClick={() => onSelectProject(project)}>
       <h3>{project.name || 'Sem Título'}</h3>
       <p><strong>Construtora:</strong> {project.developer || 'N/A'}</p>
       <p><strong>Bairro:</strong> {getLocalizedText(project.location?.neighborhood, language) || 'N/A'}</p>
       <p><strong>Status:</strong> {getLocalizedText(project.status, language) || 'N/A'}</p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+        {!hasBookData && (
+          <div style={{ padding: '0.2rem 0.5rem', backgroundColor: '#fff3cd', color: '#856404', borderRadius: '4px', fontSize: '0.8rem', display: 'inline-block', width: 'fit-content' }}>
+            ⚠️ Aguardando Book do Projeto
+          </div>
+        )}
+
+        {!hasTabelaData && (
+          <div style={{ padding: '0.2rem 0.5rem', backgroundColor: '#f8d7da', color: '#721c24', borderRadius: '4px', fontSize: '0.8rem', display: 'inline-block', width: 'fit-content' }}>
+            📄 Aguardando Tabela de Preços
+          </div>
+        )}
+      </div>
+
       <div style={{ marginTop: '1rem', color: '#007bff', fontWeight: 'bold' }}>
         Ver Detalhes e Unidades ➔
       </div>
