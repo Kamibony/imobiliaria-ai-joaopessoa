@@ -331,6 +331,17 @@ function App() {
     }
   };
 
+  const handleDeleteJob = async (jobId) => {
+    if (window.confirm('Tem certeza de que deseja excluir este registro? Isso apenas limpará o histórico, não os imóveis extraídos.')) {
+      try {
+        await deleteDoc(doc(db, 'pdf_jobs', jobId));
+      } catch (err) {
+        console.error("Erro ao excluir registro de job:", err);
+        alert("Erro ao excluir. Verifique se você tem permissões de administrador.");
+      }
+    }
+  };
+
   const handleVerifySource = async (sourcePath) => {
     try {
       setAuditLoading(true);
@@ -437,6 +448,7 @@ function App() {
                     <th style={{ padding: '10px', textAlign: 'left' }}>Status</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Upload em</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Erro (se houver)</th>
+                    <th style={{ padding: '10px', textAlign: 'center' }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -466,10 +478,19 @@ function App() {
                         <td style={{ padding: '10px', fontSize: '0.9em', color: '#dc3545' }}>
                           {job.error || '-'}
                         </td>
+                        <td style={{ padding: '10px', textAlign: 'center' }}>
+                          <button
+                            onClick={() => handleDeleteJob(job.id)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
+                            title="Excluir registro"
+                          >
+                            🗑️
+                          </button>
+                        </td>
                       </tr>
                       {job.status === 'Success' && job.stats && (
                         <tr style={{ borderBottom: '1px solid #eee' }}>
-                          <td colSpan="4" style={{ padding: '0 10px 15px 10px' }}>
+                          <td colSpan="5" style={{ padding: '0 10px 15px 10px' }}>
                             <div style={{
                               display: 'flex', gap: '1rem', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
                               padding: '1rem', borderRadius: '8px', color: '#166534', fontSize: '0.9em'

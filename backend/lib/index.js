@@ -41,13 +41,6 @@ const admin = __importStar(require("firebase-admin"));
 const vertexai_1 = require("@google-cloud/vertexai");
 const schema_1 = require("./schema");
 const utils_1 = require("./utils");
-function slugify(text) {
-    if (!text)
-        return '';
-    return text.toString().toLowerCase().trim()
-        .replace(/[\s\W-]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-}
 const cors = require("cors");
 admin.initializeApp();
 const apiSecret = (0, params_1.defineSecret)("API_SECRET");
@@ -59,6 +52,30 @@ function getVertexAi() {
         vertexAiInstance = new vertexai_1.VertexAI({ project: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT, location: 'us-central1' });
     }
     return vertexAiInstance;
+}
+async function callGeminiWithRetry(generativeModel, request, maxRetries = 3) {
+    const delays = [3000, 6000, 10000]; // 3s, 6s, 10s
+    let attempt = 0;
+    while (attempt < maxRetries) {
+        try {
+            return await generativeModel.generateContent(request);
+        }
+        catch (error) {
+            const errorMessage = error?.message || '';
+            const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Resource Exhausted');
+            const isServiceUnavailable = errorMessage.includes('503') || errorMessage.includes('Service Unavailable');
+            if ((isRateLimit || isServiceUnavailable) && attempt < maxRetries) {
+                const delay = delays[attempt];
+                console.warn(`Vertex AI API Error (${isRateLimit ? '429' : '503'}). Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                attempt++;
+            }
+            else {
+                throw error; // Re-throw if it's not a retryable error or we've exhausted retries
+            }
+        }
+    }
+    throw new Error("Failed to generate content after max retries");
 }
 exports.ingestPdf = (0, storage_1.onObjectFinalized)({
     timeoutSeconds: 300,
@@ -84,15 +101,32 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         }
     }
     try {
+        const projectsSnapshot = await db.collection("projects").get();
+        const existingProjects = projectsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                name: data.name,
+                developer: data.developer
+            };
+        });
         const prompt = `
       Leia este Book e Tabela de Preços imobiliários e extraia os dados do empreendimento e suas unidades.
       O documento é de João Pessoa (bairros como Cabo Branco, Tambaú, Bessa).
+
+      Here is a list of existing real estate projects currently registered in our database:
+      ${JSON.stringify(existingProjects)}
+
+      Your Task: Analyze the text, location, and metadata of the uploaded PDF. Determine if this document corresponds to one of the existing projects listed above (even if fields like the developer name are missing, abbreviated, or formatted differently in this specific PDF).
+      - If it matches an existing project, return that project's exact "id" inside the "project" object in your JSON response.
+      - If it is a brand-new project that does not match any entry, return null for the "id", and the system will generate a fresh unique identifier.
 
       Retorne estritamente um JSON contendo o empreendimento e a lista de unidades.
 
       Formato de saída esperado (JSON object):
       {
         "project": {
+          "id": "exact-id-from-list-or-null",
           "name": "nome do empreendimento",
           "developer": "nome da construtora",
           "delivery_date": "data de entrega ISO 8601 ou null",
@@ -145,7 +179,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
       5. "source" no snapshot deve ser "${filePath}".
     `;
         const generativeModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
-        const result = await generativeModel.generateContent({
+        const result = await callGeminiWithRetry(generativeModel, {
             contents: [{
                     role: 'user',
                     parts: [
@@ -187,9 +221,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
             console.error("Expected project data with a name.");
             throw new Error("Invalid JSON format from LLM: Missing project name");
         }
-        const projectName = projectData.name;
-        const developerName = projectData.developer || "unknown";
-        const projectId = slugify(developerName + "-" + projectName) || db.collection("projects").doc().id;
+        const projectId = projectData.id || db.collection("projects").doc().id;
         projectData.id = projectId;
         // Coordinate Fallback Logic for Project
         projectData.needs_geocoding = false;

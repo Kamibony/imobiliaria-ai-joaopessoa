@@ -24,6 +24,31 @@ function getVertexAi() {
   return vertexAiInstance;
 }
 
+async function callGeminiWithRetry(generativeModel: any, request: any, maxRetries = 3) {
+  const delays = [3000, 6000, 10000]; // 3s, 6s, 10s
+  let attempt = 0;
+
+  while (attempt < maxRetries) {
+    try {
+      return await generativeModel.generateContent(request);
+    } catch (error: any) {
+      const errorMessage = error?.message || '';
+      const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Resource Exhausted');
+      const isServiceUnavailable = errorMessage.includes('503') || errorMessage.includes('Service Unavailable');
+
+      if ((isRateLimit || isServiceUnavailable) && attempt < maxRetries) {
+        const delay = delays[attempt];
+        console.warn(`Vertex AI API Error (${isRateLimit ? '429' : '503'}). Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        attempt++;
+      } else {
+        throw error; // Re-throw if it's not a retryable error or we've exhausted retries
+      }
+    }
+  }
+  throw new Error("Failed to generate content after max retries");
+}
+
 export const ingestPdf = onObjectFinalized({
   timeoutSeconds: 300,
 }, async (event) => {
@@ -133,7 +158,7 @@ export const ingestPdf = onObjectFinalized({
 
     const generativeModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const result = await generativeModel.generateContent({
+    const result = await callGeminiWithRetry(generativeModel, {
       contents: [{
         role: 'user',
         parts: [
