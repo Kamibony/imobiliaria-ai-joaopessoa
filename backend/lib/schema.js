@@ -4,8 +4,8 @@ exports.ProjectSchema = exports.UnitSchema = exports.PropertySnapshotSchema = vo
 const zod_1 = require("zod");
 exports.PropertySnapshotSchema = zod_1.z.object({
     timestamp: zod_1.z.string(),
-    price_brl: zod_1.z.number().nullable(),
-    price_per_m2_brl: zod_1.z.number().nullable(),
+    price_brl: zod_1.z.number().nullable().optional(),
+    price_per_m2_brl: zod_1.z.number().nullable().optional(),
     source: zod_1.z.string(),
 });
 exports.UnitSchema = zod_1.z.object({

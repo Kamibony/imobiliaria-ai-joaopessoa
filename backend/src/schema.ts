@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 export const PropertySnapshotSchema = z.object({
   timestamp: z.string(),
-  price_brl: z.number().nullable(),
-  price_per_m2_brl: z.number().nullable(),
+  price_brl: z.number().nullable().optional(),
+  price_per_m2_brl: z.number().nullable().optional(),
   source: z.string(),
 });
 
