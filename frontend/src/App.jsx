@@ -1,7 +1,7 @@
 import ErrorBoundary from './ErrorBoundary';
 import { LanguageProvider, useLanguage, getLocalizedText } from './LanguageContext';
 import React, { useState, useEffect, useMemo } from 'react'
-import { collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore'
+import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 import { getStorage, ref, getDownloadURL } from 'firebase/storage'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
@@ -12,7 +12,7 @@ import { db, auth } from './firebase'
 import PDFUploader from './components/PDFUploader';
 import './App.css'
 
-const ProjectDetailModal = ({ project, onClose, onVerifySource }) => {
+const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
   const { language } = useLanguage();
   const [units, setUnits] = useState([]);
   const [loadingUnits, setLoadingUnits] = useState(true);
@@ -47,9 +47,17 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource }) => {
   return (
     <div className="audit-modal">
       <div className="audit-modal-content" style={{ width: '80%', maxWidth: '1000px', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div className="audit-modal-header" style={{ padding: '1.5rem', borderBottom: '1px solid #e5e7eb' }}>
+        <div className="audit-modal-header" style={{ padding: '1.5rem', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>{project.name || 'Sem Título'}</h2>
-          <button onClick={onClose} className="close-btn" style={{ fontSize: '1.5rem' }}>✕</button>
+          <div>
+            <button
+              onClick={() => onDelete(project.id)}
+              style={{ backgroundColor: '#dc2626', color: 'white', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', border: 'none', marginRight: '1rem', fontWeight: 'bold' }}
+            >
+              Excluir Empreendimento
+            </button>
+            <button onClick={onClose} className="close-btn" style={{ fontSize: '1.5rem' }}>✕</button>
+          </div>
         </div>
         <div className="audit-modal-body" style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
@@ -338,6 +346,26 @@ function App() {
       } catch (err) {
         console.error("Erro ao excluir registro de job:", err);
         alert("Erro ao excluir. Verifique se você tem permissões de administrador.");
+      }
+    }
+  };
+
+  const handleDeleteProject = async (projectId) => {
+    if (window.confirm('Tem certeza que deseja excluir este empreendimento e todas as suas unidades? Esta ação não pode ser desfeita.')) {
+      try {
+        const unitsRef = collection(db, 'projects', projectId, 'units');
+        const unitsSnapshot = await getDocs(unitsRef);
+
+        const deletePromises = unitsSnapshot.docs.map(unitDoc =>
+          deleteDoc(doc(db, 'projects', projectId, 'units', unitDoc.id))
+        );
+        await Promise.all(deletePromises);
+
+        await deleteDoc(doc(db, 'projects', projectId));
+        setSelectedProject(null);
+      } catch (err) {
+        console.error("Erro ao excluir empreendimento:", err);
+        alert("Erro ao excluir empreendimento. Verifique se você tem permissões de administrador.");
       }
     }
   };
@@ -652,6 +680,7 @@ function App() {
           project={selectedProject}
           onClose={() => setSelectedProject(null)}
           onVerifySource={handleVerifySource}
+          onDelete={handleDeleteProject}
         />
       )}
 
