@@ -53,4 +53,6 @@ export const ProjectSchema = z.object({
     hero_images: z.array(z.string()).nullable().optional(),
     brochures: z.array(z.string()).nullable().optional(),
   }).nullable().optional(),
+  resolution_state: z.enum(['active', 'staged']).nullable().optional(),
+  possible_matches: z.array(z.string()).nullable().optional(),
 });
