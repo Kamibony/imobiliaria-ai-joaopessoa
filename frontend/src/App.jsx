@@ -35,6 +35,9 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
   const targetPersona = Array.isArray(targetPersonaRaw) ? targetPersonaRaw : (typeof targetPersonaRaw === 'string' ? [targetPersonaRaw] : []);
 
   const getLatestSnapshot = (unit) => {
+    // Utilize the pre-calculated latest_snapshot if available
+    if (unit.latest_snapshot) return unit.latest_snapshot;
+
     const snapshots = unit.snapshots || [];
     const sortedSnapshots = [...snapshots].sort((a, b) => {
       const dateA = new Date(a.timestamp);
@@ -375,7 +378,7 @@ function App() {
       setAuditLoading(true);
       setIsAuditModalOpen(true);
       const storage = getStorage();
-      const fileRef = ref(storage, `b2b_pdfs/${sourcePath}`);
+      const fileRef = ref(storage, sourcePath); // Remove redundant prefix to fix 404
       const downloadURL = await getDownloadURL(fileRef);
       setAuditSourceUrl(downloadURL);
     } catch (error) {

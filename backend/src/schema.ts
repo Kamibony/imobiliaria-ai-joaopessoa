@@ -8,16 +8,20 @@ export const PropertySnapshotSchema = z.object({
 });
 
 export const UnitSchema = z.object({
-  id: z.string(),
+  id: z.string().nullable().optional(),
   unit_number: z.string().nullable().optional(),
   area_m2: z.number().nullable().optional(),
   bedrooms: z.number().nullable().optional(),
   sun_orientation: z.enum(['nascente', 'nascente_sul', 'sul', 'poente', '']).nullable().optional(),
-  snapshots: z.array(PropertySnapshotSchema),
+  snapshots: z.array(PropertySnapshotSchema).optional(),
+  assets: z.object({
+    floor_plans: z.array(z.string()).nullable().optional(),
+    renders: z.array(z.string()).nullable().optional(),
+  }).nullable().optional(),
 });
 
 export const ProjectSchema = z.object({
-  id: z.string(),
+  id: z.string().nullable().optional(),
   needs_geocoding: z.boolean().optional(),
   name: z.string(),
   developer: z.string().nullable().optional(),
@@ -43,5 +47,10 @@ export const ProjectSchema = z.object({
       'pt-BR': z.string().nullable().optional(),
       'en': z.string().nullable().optional(),
     }).nullable().optional(),
+  }).nullable().optional(),
+  assets: z.object({
+    logo: z.string().nullable().optional(),
+    hero_images: z.array(z.string()).nullable().optional(),
+    brochures: z.array(z.string()).nullable().optional(),
   }).nullable().optional(),
 });
