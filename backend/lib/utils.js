@@ -1,10 +1,21 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizeString = normalizeString;
+exports.normalizeProjectName = normalizeProjectName;
 exports.levenshteinDistance = levenshteinDistance;
 exports.fuzzyMatchNeighborhood = fuzzyMatchNeighborhood;
 function normalizeString(str) {
     return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+function normalizeProjectName(name) {
+    if (!name)
+        return '';
+    let normalized = normalizeString(name);
+    const genericTerms = ['edificio', 'residencial', 'condominio', 'complexo', 'empreendimento'];
+    for (const term of genericTerms) {
+        normalized = normalized.replace(new RegExp(`\\b${term}\\b`, 'g'), '');
+    }
+    return normalized.replace(/\s+/g, ' ').trim();
 }
 function levenshteinDistance(a, b) {
     const matrix = [];

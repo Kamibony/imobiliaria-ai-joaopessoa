@@ -4,7 +4,7 @@ import { onObjectFinalized } from "firebase-functions/v2/storage";
 import * as admin from "firebase-admin";
 import { VertexAI } from "@google-cloud/vertexai";
 import { ProjectSchema, UnitSchema } from "./schema";
-import { fuzzyMatchNeighborhood } from "./utils";
+import { fuzzyMatchNeighborhood, normalizeProjectName, levenshteinDistance, normalizeString } from "./utils";
 
 import cors = require("cors");
 
@@ -91,19 +91,13 @@ export const ingestPdf = onObjectFinalized({
       Leia este Book e Tabela de Preços imobiliários e extraia os dados do empreendimento e suas unidades.
       O documento é de João Pessoa (bairros como Cabo Branco, Tambaú, Bessa).
 
-      Here is a list of existing real estate projects currently registered in our database:
-      ${JSON.stringify(existingProjects)}
-
-      Your Task: Analyze the text, location, and metadata of the uploaded PDF. Determine if this document corresponds to one of the existing projects listed above (even if fields like the developer name are missing, abbreviated, or formatted differently in this specific PDF).
-      - If it matches an existing project, return that project's exact "id" inside the "project" object in your JSON response.
-      - If it is a brand-new project that does not match any entry, return null for the "id", and the system will generate a fresh unique identifier.
+      Your Task: Analyze the text, location, and metadata of the uploaded PDF and extract the following real estate data into a strict JSON format.
 
       Retorne estritamente um JSON contendo o empreendimento e a lista de unidades.
 
       Formato de saída esperado (JSON object):
       {
         "project": {
-          "id": "exact-id-from-list-or-null",
           "name": "nome do empreendimento",
           "developer": "nome da construtora",
           "delivery_date": "data de entrega ISO 8601 ou null",
@@ -207,7 +201,45 @@ export const ingestPdf = onObjectFinalized({
        throw new Error("Invalid JSON format from LLM: Missing project name");
     }
 
-    const projectId = projectData.id || db.collection("projects").doc().id;
+    // Deterministic Entity Resolution
+    let matchedProjectId = null;
+    const extractedNormalizedName = normalizeProjectName(projectData.name);
+    const extractedNormalizedDev = projectData.developer ? normalizeString(projectData.developer) : null;
+    let bestMatchDistance = Infinity;
+
+    for (const p of existingProjects) {
+        const dbNormalizedName = normalizeProjectName(p.name);
+
+        // Exact Match
+        if (dbNormalizedName === extractedNormalizedName) {
+            matchedProjectId = p.id;
+            break;
+        }
+
+        // Fuzzy Match
+        const distance = levenshteinDistance(extractedNormalizedName, dbNormalizedName);
+        if (distance < bestMatchDistance && distance <= 3) {
+            // Further qualify with developer if available
+            if (extractedNormalizedDev && p.developer) {
+                const dbNormalizedDev = normalizeString(p.developer);
+                if (dbNormalizedDev === extractedNormalizedDev || levenshteinDistance(extractedNormalizedDev, dbNormalizedDev) <= 2) {
+                     bestMatchDistance = distance;
+                     matchedProjectId = p.id;
+                }
+            } else {
+                bestMatchDistance = distance;
+                matchedProjectId = p.id;
+            }
+        }
+    }
+
+    if (matchedProjectId) {
+         console.log(`Matched extracted project "${projectData.name}" to existing project ID: ${matchedProjectId}`);
+    } else {
+         console.log(`No match found for extracted project "${projectData.name}". Creating new project.`);
+    }
+
+    const projectId = matchedProjectId || db.collection("projects").doc().id;
     projectData.id = projectId;
 
     // Coordinate Fallback Logic for Project
@@ -285,26 +317,37 @@ export const ingestPdf = onObjectFinalized({
           });
         }
 
-        const unitId = propertyData.id || propertyData.unit_number || unitsCollectionRef.doc().id;
+        let generatedId = propertyData.id || propertyData.unit_number;
+        if (generatedId) {
+             generatedId = normalizeString(String(generatedId)).replace(/\s+/g, '-');
+        } else {
+             generatedId = unitsCollectionRef.doc().id;
+        }
+
+        const unitId = generatedId;
         propertyData.id = unitId;
 
         const unitDocRef = unitsCollectionRef.doc(unitId);
 
-        await db.runTransaction(async (transaction) => {
-            const docSnap = await transaction.get(unitDocRef);
-            if (docSnap.exists) {
-                const newSnapshots = propertyData.snapshots || [];
-                const existingData = docSnap.data();
-                const existingSnapshots = existingData?.snapshots || [];
-                const mergedSnapshots = [...existingSnapshots, ...newSnapshots];
+        const { snapshots, ...unitDataWithoutSnapshots } = propertyData;
 
-                const { snapshots, ...otherData } = propertyData;
-                transaction.set(unitDocRef, { ...otherData, snapshots: mergedSnapshots }, { merge: true });
-            } else {
-                transaction.set(unitDocRef, propertyData);
+        // Set the latest snapshot on the unit doc for easy querying
+        const latestSnapshot = snapshots && snapshots.length > 0 ? snapshots[0] : null;
+        if (latestSnapshot) {
+             unitDataWithoutSnapshots.latest_snapshot = latestSnapshot;
+        }
+
+        await unitDocRef.set(unitDataWithoutSnapshots, { merge: true });
+
+        // Save snapshots to subcollection
+        if (snapshots && snapshots.length > 0) {
+            const snapshotsCollectionRef = unitDocRef.collection("snapshots");
+            for (const snap of snapshots) {
+                 const snapId = snapshotsCollectionRef.doc().id;
+                 await snapshotsCollectionRef.doc(snapId).set(snap);
             }
-        });
-        console.log(`Successfully processed PDF unit and saved unit ${unitId} for project ${projectId}`);
+        }
+        console.log(`Successfully processed PDF unit and saved unit ${unitId} and its snapshots for project ${projectId}`);
         validUnitsCount++;
       }
     }

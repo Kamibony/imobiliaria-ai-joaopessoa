@@ -9,15 +9,19 @@ exports.PropertySnapshotSchema = zod_1.z.object({
     source: zod_1.z.string(),
 });
 exports.UnitSchema = zod_1.z.object({
-    id: zod_1.z.string(),
+    id: zod_1.z.string().nullable().optional(),
     unit_number: zod_1.z.string().nullable().optional(),
     area_m2: zod_1.z.number().nullable().optional(),
     bedrooms: zod_1.z.number().nullable().optional(),
     sun_orientation: zod_1.z.enum(['nascente', 'nascente_sul', 'sul', 'poente', '']).nullable().optional(),
-    snapshots: zod_1.z.array(exports.PropertySnapshotSchema),
+    snapshots: zod_1.z.array(exports.PropertySnapshotSchema).optional(),
+    assets: zod_1.z.object({
+        floor_plans: zod_1.z.array(zod_1.z.string()).nullable().optional(),
+        renders: zod_1.z.array(zod_1.z.string()).nullable().optional(),
+    }).nullable().optional(),
 });
 exports.ProjectSchema = zod_1.z.object({
-    id: zod_1.z.string(),
+    id: zod_1.z.string().nullable().optional(),
     needs_geocoding: zod_1.z.boolean().optional(),
     name: zod_1.z.string(),
     developer: zod_1.z.string().nullable().optional(),
@@ -43,6 +47,11 @@ exports.ProjectSchema = zod_1.z.object({
             'pt-BR': zod_1.z.string().nullable().optional(),
             'en': zod_1.z.string().nullable().optional(),
         }).nullable().optional(),
+    }).nullable().optional(),
+    assets: zod_1.z.object({
+        logo: zod_1.z.string().nullable().optional(),
+        hero_images: zod_1.z.array(zod_1.z.string()).nullable().optional(),
+        brochures: zod_1.z.array(zod_1.z.string()).nullable().optional(),
     }).nullable().optional(),
 });
 //# sourceMappingURL=schema.js.map

@@ -2,6 +2,16 @@ export function normalizeString(str: string): string {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
+export function normalizeProjectName(name: string): string {
+  if (!name) return '';
+  let normalized = normalizeString(name);
+  const genericTerms = ['edificio', 'residencial', 'condominio', 'complexo', 'empreendimento'];
+  for (const term of genericTerms) {
+    normalized = normalized.replace(new RegExp(`\\b${term}\\b`, 'g'), '');
+  }
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
 export function levenshteinDistance(a: string, b: string): number {
   const matrix = [];
   for (let i = 0; i <= b.length; i++) {
