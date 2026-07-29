@@ -204,16 +204,41 @@ export const ingestPdf = onObjectFinalized({
     // Deterministic Entity Resolution
     let matchedProjectId = null;
     const extractedNormalizedName = normalizeProjectName(projectData.name);
+    const extractedTokens = extractedNormalizedName.split(' ').filter(t => t.length > 2);
     const extractedNormalizedDev = projectData.developer ? normalizeString(projectData.developer) : null;
     let bestMatchDistance = Infinity;
+    const possibleMatches: string[] = [];
 
     for (const p of existingProjects) {
         const dbNormalizedName = normalizeProjectName(p.name);
+        const dbTokens = dbNormalizedName.split(' ').filter(t => t.length > 2);
 
         // Exact Match
         if (dbNormalizedName === extractedNormalizedName) {
             matchedProjectId = p.id;
             break;
+        }
+
+        // Token Inclusion (Semantic Match)
+        // Check if all extracted tokens are in db name or vice versa
+        let isTokenMatch = false;
+        if (extractedTokens.length > 0 && dbTokens.length > 0) {
+            const allExtractedInDb = extractedTokens.every(t => dbTokens.includes(t));
+            const allDbInExtracted = dbTokens.every(t => extractedTokens.includes(t));
+            if (allExtractedInDb || allDbInExtracted) {
+                isTokenMatch = true;
+            } else {
+                // Partial token overlap for staging suggestions
+                const overlap = extractedTokens.filter(t => dbTokens.includes(t)).length;
+                if (overlap > 0) {
+                    possibleMatches.push(p.id);
+                }
+            }
+        }
+
+        if (isTokenMatch) {
+             matchedProjectId = p.id;
+             break;
         }
 
         // Fuzzy Match
@@ -235,8 +260,13 @@ export const ingestPdf = onObjectFinalized({
 
     if (matchedProjectId) {
          console.log(`Matched extracted project "${projectData.name}" to existing project ID: ${matchedProjectId}`);
+         projectData.resolution_state = 'active';
     } else {
-         console.log(`No match found for extracted project "${projectData.name}". Creating new project.`);
+         console.log(`No high-confidence match found for "${projectData.name}". Routing to staging.`);
+         projectData.resolution_state = 'staged';
+         if (possibleMatches.length > 0) {
+             projectData.possible_matches = possibleMatches;
+         }
     }
 
     const projectId = matchedProjectId || db.collection("projects").doc().id;

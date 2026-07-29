@@ -1,7 +1,7 @@
 import ErrorBoundary from './ErrorBoundary';
 import { LanguageProvider, useLanguage, getLocalizedText } from './LanguageContext';
 import React, { useState, useEffect, useMemo } from 'react'
-import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
+import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs, updateDoc, setDoc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 import { getStorage, ref, getDownloadURL } from 'firebase/storage'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
@@ -209,6 +209,9 @@ function App() {
   const [auditSourceUrl, setAuditSourceUrl] = useState(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
   const [auditLoading, setAuditLoading] = useState(false)
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [stagedProjectToMerge, setStagedProjectToMerge] = useState(null)
+  const [selectedTargetMergeId, setSelectedTargetMergeId] = useState('')
   const [selectedProject, setSelectedProject] = useState(null)
 
   const [filterBairro, setFilterBairro] = useState('All')
@@ -246,6 +249,9 @@ function App() {
 
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
+      // Hide staged projects from the main catalog
+      if (p.resolution_state === 'staged') return false;
+
       const bairroMatch = filterBairro === 'All' ||
                           (p.location?.neighborhood === filterBairro) ||
                           (p.location?.neighborhood === 'Tambaú' && filterBairro === 'Tambau') ||
@@ -353,6 +359,51 @@ function App() {
     }
   };
 
+  const handleConfirmAsNew = async (projectId) => {
+    try {
+      await updateDoc(doc(db, 'projects', projectId), {
+        resolution_state: 'active'
+      });
+      alert('Projeto confirmado com sucesso!');
+    } catch (err) {
+      console.error("Erro ao confirmar projeto:", err);
+      alert("Erro ao confirmar projeto.");
+    }
+  };
+
+  const handleMergeSubmit = async () => {
+    if (!stagedProjectToMerge || !selectedTargetMergeId) return;
+    try {
+      // 1. Get all units from the staged project
+      const stagedUnitsRef = collection(db, 'projects', stagedProjectToMerge.id, 'units');
+      const stagedUnitsSnapshot = await getDocs(stagedUnitsRef);
+
+      // 2. Move them to the target project
+      const movePromises = stagedUnitsSnapshot.docs.map(unitDoc => {
+        const unitData = unitDoc.data();
+        return setDoc(doc(db, 'projects', selectedTargetMergeId, 'units', unitDoc.id), unitData);
+      });
+      await Promise.all(movePromises);
+
+      // 3. Delete units from the staged project
+      const deleteUnitsPromises = stagedUnitsSnapshot.docs.map(unitDoc =>
+        deleteDoc(doc(db, 'projects', stagedProjectToMerge.id, 'units', unitDoc.id))
+      );
+      await Promise.all(deleteUnitsPromises);
+
+      // 4. Delete the staged project document itself
+      await deleteDoc(doc(db, 'projects', stagedProjectToMerge.id));
+
+      setMergeModalOpen(false);
+      setStagedProjectToMerge(null);
+      setSelectedTargetMergeId('');
+      alert('Projeto mesclado com sucesso!');
+    } catch (err) {
+      console.error("Erro ao mesclar projetos:", err);
+      alert("Erro ao mesclar projetos. Verifique o console.");
+    }
+  };
+
   const handleDeleteProject = async (projectId) => {
     if (window.confirm('Tem certeza que deseja excluir este empreendimento e todas as suas unidades? Esta ação não pode ser desfeita.')) {
       try {
@@ -454,6 +505,12 @@ function App() {
           onClick={() => setActiveTab('catalogo-mapa')}
         >
           Catálogo & Mapa
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'staging' ? 'active' : ''}`}
+          onClick={() => setActiveTab('staging')}
+        >
+          Staging (Revisão)
         </button>
       </div>
 
@@ -588,6 +645,44 @@ function App() {
 
 
 
+      {activeTab === 'staging' && (
+        <div className="staging-container" style={{ padding: '1rem' }}>
+           <div style={{ backgroundColor: '#fff3cd', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #ffc107', marginBottom: '1.5rem', color: '#856404', fontSize: '0.95rem' }}>
+            Staging (Revisão): Imóveis que não tiveram correspondência exata e precisam de aprovação manual.
+          </div>
+          {projects.filter(p => p.resolution_state === 'staged').length === 0 ? (
+            <p>Nenhum projeto em staging no momento.</p>
+          ) : (
+            <div className="property-grid">
+              {projects.filter(p => p.resolution_state === 'staged').map(project => (
+                <div key={project.id} className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                  <h3>{project.name}</h3>
+                  <p><strong>Desenvolvedor:</strong> {project.developer || 'N/A'}</p>
+                  <p><strong>Bairro:</strong> {project.location?.neighborhood || 'N/A'}</p>
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                    <button
+                      style={{ backgroundColor: '#28a745', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer' }}
+                      onClick={() => handleConfirmAsNew(project.id)}
+                    >
+                      Confirmar como Novo
+                    </button>
+                    <button
+                      style={{ backgroundColor: '#007bff', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer' }}
+                      onClick={() => {
+                        setStagedProjectToMerge(project);
+                        setMergeModalOpen(true);
+                      }}
+                    >
+                      Mesclar com Existente
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === 'catalogo-mapa' && (
         <div className="card" style={{ padding: '1rem', width: '100%' }}>
           <h2>Mapa de Imóveis</h2>
@@ -685,6 +780,44 @@ function App() {
           onVerifySource={handleVerifySource}
           onDelete={handleDeleteProject}
         />
+      )}
+
+      {mergeModalOpen && stagedProjectToMerge && (
+        <div className="modal" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="modal-content" style={{ backgroundColor: '#fff', padding: '2rem', borderRadius: '8px', width: '500px', maxWidth: '90%' }}>
+            <h2>Mesclar: {stagedProjectToMerge.name}</h2>
+            <p>Selecione um projeto existente para mover as unidades e mesclar os dados.</p>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <select
+                value={selectedTargetMergeId}
+                onChange={(e) => setSelectedTargetMergeId(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem' }}
+              >
+                <option value="">Selecione um projeto destino...</option>
+                {projects.filter(p => p.resolution_state !== 'staged').map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.developer || 'Sem construtora'})</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
+               <button
+                 style={{ backgroundColor: '#6c757d', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer' }}
+                 onClick={() => {
+                 setMergeModalOpen(false);
+                 setStagedProjectToMerge(null);
+                 setSelectedTargetMergeId('');
+               }}>Cancelar</button>
+               <button
+                 style={{ backgroundColor: '#007bff', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer' }}
+                 disabled={!selectedTargetMergeId}
+                 onClick={() => handleMergeSubmit()}
+               >
+                 Confirmar Mesclagem
+               </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {isAuditModalOpen && (
