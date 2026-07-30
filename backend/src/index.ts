@@ -4,7 +4,14 @@ import { onObjectFinalized } from "firebase-functions/v2/storage";
 import * as admin from "firebase-admin";
 import { VertexAI } from "@google-cloud/vertexai";
 import { ProjectSchema, UnitSchema } from "./schema";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import { fuzzyMatchNeighborhood, normalizeProjectName, levenshteinDistance, normalizeString } from "./utils";
+
+// Using require for CommonJS modules not fully typed for ES6 imports
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+const { createCanvas } = require('canvas');
 
 import cors = require("cors");
 
@@ -74,6 +81,59 @@ export const ingestPdf = onObjectFinalized({
     } catch (e) {
       console.log("Could not update pdf_jobs to Processing, moving on...", e);
     }
+  }
+
+  // Download PDF and extract image using pdfjs-dist & canvas
+  let heroImageUrl: string | null = null;
+  const tempPdfPath = path.join(os.tmpdir(), fileName || "temp.pdf");
+
+  try {
+      await admin.storage().bucket(fileBucket).file(filePath).download({ destination: tempPdfPath });
+
+      const data = new Uint8Array(fs.readFileSync(tempPdfPath));
+      const loadingTask = pdfjsLib.getDocument({
+          data: data,
+          standardFontDataUrl: path.join(__dirname, '../node_modules/pdfjs-dist/standard_fonts/'),
+      });
+      const pdfDocument = await loadingTask.promise;
+      const page = await pdfDocument.getPage(1);
+      const viewport = page.getViewport({ scale: 2.0 });
+
+      const canvas = createCanvas(viewport.width, viewport.height);
+      const ctx = canvas.getContext('2d');
+
+      const renderContext = {
+          canvasContext: ctx,
+          viewport: viewport
+      };
+
+      await page.render(renderContext).promise;
+      const buffer = canvas.toBuffer('image/png');
+
+      const imageFileName = `${fileName}_page1.png`;
+      const tempImagePath = path.join(os.tmpdir(), imageFileName);
+      fs.writeFileSync(tempImagePath, buffer);
+
+      const destPath = `b2b_assets/${imageFileName}`;
+      await admin.storage().bucket(fileBucket).upload(tempImagePath, {
+          destination: destPath,
+          metadata: {
+              contentType: 'image/png'
+          }
+      });
+
+      console.log(`Hero image uploaded to gs://${fileBucket}/${destPath}`);
+      heroImageUrl = destPath;
+
+      try {
+          fs.unlinkSync(tempImagePath);
+      } catch(e) {}
+  } catch (error) {
+      console.error("Failed to extract visual assets:", error);
+  } finally {
+      try {
+          fs.unlinkSync(tempPdfPath);
+      } catch(e) {}
   }
 
   try {
@@ -148,6 +208,7 @@ export const ingestPdf = onObjectFinalized({
       3. Extraia o "empreendimento" para project.name, "construtora" para project.developer.
       4. Extraia as unidades para units[].area_m2 e units[].snapshots[0].price_brl.
       5. "source" no snapshot deve ser "${filePath}".
+      6. Se houver descrição de imagens de plantas ou renders para as unidades ou para o empreendimento, tente extrair metadados, embora a imagem real será processada externamente.
     `;
 
     const generativeModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -271,6 +332,16 @@ export const ingestPdf = onObjectFinalized({
 
     const projectId = matchedProjectId || db.collection("projects").doc().id;
     projectData.id = projectId;
+
+    if (heroImageUrl) {
+        if (!projectData.assets) {
+            projectData.assets = {};
+        }
+        if (!projectData.assets.hero_images) {
+            projectData.assets.hero_images = [];
+        }
+        projectData.assets.hero_images.push(heroImageUrl);
+    }
 
     // Coordinate Fallback Logic for Project
     projectData.needs_geocoding = false;

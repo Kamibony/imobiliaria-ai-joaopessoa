@@ -16,6 +16,26 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
   const { language } = useLanguage();
   const [units, setUnits] = useState([]);
   const [loadingUnits, setLoadingUnits] = useState(true);
+  const [heroImageUrl, setHeroImageUrl] = useState(null);
+  const [hoveredUnitId, setHoveredUnitId] = useState(null);
+
+  useEffect(() => {
+    if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
+      const fetchHeroImage = async () => {
+        try {
+          const storage = getStorage();
+          const fileRef = ref(storage, project.assets.hero_images[0]);
+          const downloadURL = await getDownloadURL(fileRef);
+          setHeroImageUrl(downloadURL);
+        } catch (error) {
+          console.error("Error fetching hero image URL:", error);
+        }
+      };
+      fetchHeroImage();
+    } else {
+      setHeroImageUrl(null);
+    }
+  }, [project]);
 
   useEffect(() => {
     if (!project || !project.id) return;
@@ -63,6 +83,12 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
           </div>
         </div>
         <div className="audit-modal-body" style={{ padding: '1.5rem' }}>
+          {heroImageUrl && (
+            <div style={{ width: '100%', marginBottom: '2rem', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+              <img src={heroImageUrl} alt="Project Hero Render" style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'cover' }} />
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '300px' }}>
               <h3>Detalhes do Empreendimento</h3>
@@ -107,42 +133,75 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
             ) : units.length === 0 ? (
               <p>Nenhuma unidade encontrada para este empreendimento.</p>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid #ddd', textAlign: 'left', backgroundColor: '#f9fafb' }}>
-                    <th style={{ padding: '12px' }}>Unidade</th>
-                    <th style={{ padding: '12px' }}>Área (m²)</th>
-                    <th style={{ padding: '12px' }}>Quartos</th>
-                    <th style={{ padding: '12px' }}>Preço</th>
-                    <th style={{ padding: '12px' }}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {units.map(unit => {
-                    const latest = getLatestSnapshot(unit);
-                    return (
-                      <tr key={unit.id} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '12px' }}><strong>{unit.unit_number || unit.id}</strong></td>
-                        <td style={{ padding: '12px' }}>{unit.area_m2 || '-'}</td>
-                        <td style={{ padding: '12px' }}>{unit.bedrooms || '-'}</td>
-                        <td style={{ padding: '12px' }}>
-                          {latest && latest.price_brl ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latest.price_brl) : 'Sob Consulta'}
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          {latest && latest.source && (
-                            <button
-                              onClick={() => onVerifySource(latest.source)}
-                              style={{ padding: '4px 8px', fontSize: '0.85em', cursor: 'pointer', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '4px' }}
-                            >
-                              Ver Fonte
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+                {units.map(unit => {
+                  const latest = getLatestSnapshot(unit);
+                  const priceFormatted = latest && latest.price_brl ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latest.price_brl) : 'Sob Consulta';
+                  const areaFormatted = unit.area_m2 ? `${unit.area_m2}m²` : '-';
+                  const statusFormatted = 'Disponível';
+                  return (
+                    <div
+                      key={unit.id}
+                      style={{
+                        position: 'relative',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        backgroundColor: '#f9fafb',
+                        height: '200px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        cursor: 'pointer'
+                      }}
+                      onMouseEnter={() => setHoveredUnitId(unit.id)}
+                      onMouseLeave={() => setHoveredUnitId(null)}
+                    >
+                      {/* Floor plan placeholder or image if available */}
+                      <div style={{ padding: '1rem', textAlign: 'center', color: '#9ca3af' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📐</div>
+                        <div style={{ fontWeight: 'bold', color: '#374151' }}>Unidade {unit.unit_number || unit.id}</div>
+                      </div>
+
+                      {/* Dynamic Hover Overlay */}
+                      <div
+                        className="unit-overlay"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                          color: 'white',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          opacity: hoveredUnitId === unit.id ? 1 : 0,
+                          transition: 'opacity 0.2s ease-in-out',
+                          padding: '1rem',
+                          textAlign: 'center',
+                          pointerEvents: hoveredUnitId === unit.id ? 'auto' : 'none'
+                        }}
+                      >
+                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#10b981' }}>{priceFormatted}</div>
+                        <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>{areaFormatted} • {unit.bedrooms || '-'} Quartos</div>
+                        <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginBottom: '1rem' }}>Status: {statusFormatted}</div>
+                        {latest && latest.source && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onVerifySource(latest.source); }}
+                            style={{ padding: '6px 12px', fontSize: '0.85em', cursor: 'pointer', backgroundColor: 'transparent', color: '#38bdf8', border: '1px solid #38bdf8', borderRadius: '4px' }}
+                          >
+                            Ver Fonte
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

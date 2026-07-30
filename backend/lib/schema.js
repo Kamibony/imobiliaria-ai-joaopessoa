@@ -53,5 +53,7 @@ exports.ProjectSchema = zod_1.z.object({
         hero_images: zod_1.z.array(zod_1.z.string()).nullable().optional(),
         brochures: zod_1.z.array(zod_1.z.string()).nullable().optional(),
     }).nullable().optional(),
+    resolution_state: zod_1.z.enum(['active', 'staged']).nullable().optional(),
+    possible_matches: zod_1.z.array(zod_1.z.string()).nullable().optional(),
 });
 //# sourceMappingURL=schema.js.map
