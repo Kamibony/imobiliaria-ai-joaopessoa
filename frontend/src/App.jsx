@@ -378,20 +378,37 @@ function App() {
       const stagedUnitsRef = collection(db, 'projects', stagedProjectToMerge.id, 'units');
       const stagedUnitsSnapshot = await getDocs(stagedUnitsRef);
 
-      // 2. Move them to the target project
-      const movePromises = stagedUnitsSnapshot.docs.map(unitDoc => {
+      // 2. Iterate through each unit to perform deep copy and deep delete
+      const processUnitsPromises = stagedUnitsSnapshot.docs.map(async (unitDoc) => {
+        const unitId = unitDoc.id;
         const unitData = unitDoc.data();
-        return setDoc(doc(db, 'projects', selectedTargetMergeId, 'units', unitDoc.id), unitData);
+
+        // Copy unit to target project
+        await setDoc(doc(db, 'projects', selectedTargetMergeId, 'units', unitId), unitData);
+
+        // Query snapshots for this unit
+        const snapshotsRef = collection(db, 'projects', stagedProjectToMerge.id, 'units', unitId, 'snapshots');
+        const snapshotsSnapshot = await getDocs(snapshotsRef);
+
+        // Copy snapshots to target project and delete from staged project
+        const snapshotPromises = snapshotsSnapshot.docs.map(async (snapDoc) => {
+          const snapId = snapDoc.id;
+          const snapData = snapDoc.data();
+
+          // Copy snapshot
+          await setDoc(doc(db, 'projects', selectedTargetMergeId, 'units', unitId, 'snapshots', snapId), snapData);
+
+          // Delete old snapshot
+          await deleteDoc(doc(db, 'projects', stagedProjectToMerge.id, 'units', unitId, 'snapshots', snapId));
+        });
+        await Promise.all(snapshotPromises);
+
+        // Delete old unit
+        await deleteDoc(doc(db, 'projects', stagedProjectToMerge.id, 'units', unitId));
       });
-      await Promise.all(movePromises);
+      await Promise.all(processUnitsPromises);
 
-      // 3. Delete units from the staged project
-      const deleteUnitsPromises = stagedUnitsSnapshot.docs.map(unitDoc =>
-        deleteDoc(doc(db, 'projects', stagedProjectToMerge.id, 'units', unitDoc.id))
-      );
-      await Promise.all(deleteUnitsPromises);
-
-      // 4. Delete the staged project document itself
+      // 3. Delete the staged project document itself
       await deleteDoc(doc(db, 'projects', stagedProjectToMerge.id));
 
       setMergeModalOpen(false);
