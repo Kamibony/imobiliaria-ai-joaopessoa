@@ -40,7 +40,13 @@ const storage_1 = require("firebase-functions/v2/storage");
 const admin = __importStar(require("firebase-admin"));
 const vertexai_1 = require("@google-cloud/vertexai");
 const schema_1 = require("./schema");
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
 const utils_1 = require("./utils");
+// Using require for CommonJS modules not fully typed for ES6 imports
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+const { createCanvas } = require('canvas');
 const cors = require("cors");
 admin.initializeApp();
 const apiSecret = (0, params_1.defineSecret)("API_SECRET");
@@ -99,6 +105,53 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         catch (e) {
             console.log("Could not update pdf_jobs to Processing, moving on...", e);
         }
+    }
+    // Download PDF and extract image using pdfjs-dist & canvas
+    let heroImageUrl = null;
+    const tempPdfPath = path.join(os.tmpdir(), fileName || "temp.pdf");
+    try {
+        await admin.storage().bucket(fileBucket).file(filePath).download({ destination: tempPdfPath });
+        const data = new Uint8Array(fs.readFileSync(tempPdfPath));
+        const loadingTask = pdfjsLib.getDocument({
+            data: data,
+            standardFontDataUrl: path.join(__dirname, '../node_modules/pdfjs-dist/standard_fonts/'),
+        });
+        const pdfDocument = await loadingTask.promise;
+        const page = await pdfDocument.getPage(1);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = createCanvas(viewport.width, viewport.height);
+        const ctx = canvas.getContext('2d');
+        const renderContext = {
+            canvasContext: ctx,
+            viewport: viewport
+        };
+        await page.render(renderContext).promise;
+        const buffer = canvas.toBuffer('image/png');
+        const imageFileName = `${fileName}_page1.png`;
+        const tempImagePath = path.join(os.tmpdir(), imageFileName);
+        fs.writeFileSync(tempImagePath, buffer);
+        const destPath = `b2b_assets/${imageFileName}`;
+        await admin.storage().bucket(fileBucket).upload(tempImagePath, {
+            destination: destPath,
+            metadata: {
+                contentType: 'image/png'
+            }
+        });
+        console.log(`Hero image uploaded to gs://${fileBucket}/${destPath}`);
+        heroImageUrl = destPath;
+        try {
+            fs.unlinkSync(tempImagePath);
+        }
+        catch (e) { }
+    }
+    catch (error) {
+        console.error("Failed to extract visual assets:", error);
+    }
+    finally {
+        try {
+            fs.unlinkSync(tempPdfPath);
+        }
+        catch (e) { }
     }
     try {
         const projectsSnapshot = await db.collection("projects").get();
@@ -171,6 +224,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
       3. Extraia o "empreendimento" para project.name, "construtora" para project.developer.
       4. Extraia as unidades para units[].area_m2 e units[].snapshots[0].price_brl.
       5. "source" no snapshot deve ser "${filePath}".
+      6. Se houver descrição de imagens de plantas ou renders para as unidades ou para o empreendimento, tente extrair metadados, embora a imagem real será processada externamente.
     `;
         const generativeModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
         const result = await callGeminiWithRetry(generativeModel, {
@@ -218,12 +272,36 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         // Deterministic Entity Resolution
         let matchedProjectId = null;
         const extractedNormalizedName = (0, utils_1.normalizeProjectName)(projectData.name);
+        const extractedTokens = extractedNormalizedName.split(' ').filter(t => t.length > 2);
         const extractedNormalizedDev = projectData.developer ? (0, utils_1.normalizeString)(projectData.developer) : null;
         let bestMatchDistance = Infinity;
+        const possibleMatches = [];
         for (const p of existingProjects) {
             const dbNormalizedName = (0, utils_1.normalizeProjectName)(p.name);
+            const dbTokens = dbNormalizedName.split(' ').filter(t => t.length > 2);
             // Exact Match
             if (dbNormalizedName === extractedNormalizedName) {
+                matchedProjectId = p.id;
+                break;
+            }
+            // Token Inclusion (Semantic Match)
+            // Check if all extracted tokens are in db name or vice versa
+            let isTokenMatch = false;
+            if (extractedTokens.length > 0 && dbTokens.length > 0) {
+                const allExtractedInDb = extractedTokens.every(t => dbTokens.includes(t));
+                const allDbInExtracted = dbTokens.every(t => extractedTokens.includes(t));
+                if (allExtractedInDb || allDbInExtracted) {
+                    isTokenMatch = true;
+                }
+                else {
+                    // Partial token overlap for staging suggestions
+                    const overlap = extractedTokens.filter(t => dbTokens.includes(t)).length;
+                    if (overlap > 0) {
+                        possibleMatches.push(p.id);
+                    }
+                }
+            }
+            if (isTokenMatch) {
                 matchedProjectId = p.id;
                 break;
             }
@@ -246,12 +324,26 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         }
         if (matchedProjectId) {
             console.log(`Matched extracted project "${projectData.name}" to existing project ID: ${matchedProjectId}`);
+            projectData.resolution_state = 'active';
         }
         else {
-            console.log(`No match found for extracted project "${projectData.name}". Creating new project.`);
+            console.log(`No high-confidence match found for "${projectData.name}". Routing to staging.`);
+            projectData.resolution_state = 'staged';
+            if (possibleMatches.length > 0) {
+                projectData.possible_matches = possibleMatches;
+            }
         }
         const projectId = matchedProjectId || db.collection("projects").doc().id;
         projectData.id = projectId;
+        if (heroImageUrl) {
+            if (!projectData.assets) {
+                projectData.assets = {};
+            }
+            if (!projectData.assets.hero_images) {
+                projectData.assets.hero_images = [];
+            }
+            projectData.assets.hero_images.push(heroImageUrl);
+        }
         // Coordinate Fallback Logic for Project
         projectData.needs_geocoding = false;
         if (projectData.location) {

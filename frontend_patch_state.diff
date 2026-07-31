@@ -1,0 +1,82 @@
+<<<<<<< SEARCH
+  const [loadingUnits, setLoadingUnits] = useState(true);
+  const [heroImageUrl, setHeroImageUrl] = useState(null);
+
+  useEffect(() => {
+=======
+  const [loadingUnits, setLoadingUnits] = useState(true);
+  const [heroImageUrl, setHeroImageUrl] = useState(null);
+  const [hoveredUnitId, setHoveredUnitId] = useState(null);
+
+  useEffect(() => {
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+                      onMouseEnter={(e) => {
+                         const overlay = e.currentTarget.querySelector('.unit-overlay');
+                         if (overlay) overlay.style.opacity = '1';
+                      }}
+                      onMouseLeave={(e) => {
+                         const overlay = e.currentTarget.querySelector('.unit-overlay');
+                         if (overlay) overlay.style.opacity = '0';
+                      }}
+                    >
+                      {/* Floor plan placeholder or image if available */}
+                      <div style={{ padding: '1rem', textAlign: 'center', color: '#9ca3af' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📐</div>
+                        <div style={{ fontWeight: 'bold', color: '#374151' }}>Unidade {unit.unit_number || unit.id}</div>
+                      </div>
+
+                      {/* Dynamic Hover Overlay */}
+                      <div
+                        className="unit-overlay"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                          color: 'white',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          opacity: 0,
+                          transition: 'opacity 0.2s ease-in-out',
+                          padding: '1rem',
+                          textAlign: 'center'
+                        }}
+                      >
+=======
+                      onMouseEnter={() => setHoveredUnitId(unit.id)}
+                      onMouseLeave={() => setHoveredUnitId(null)}
+                    >
+                      {/* Floor plan placeholder or image if available */}
+                      <div style={{ padding: '1rem', textAlign: 'center', color: '#9ca3af' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📐</div>
+                        <div style={{ fontWeight: 'bold', color: '#374151' }}>Unidade {unit.unit_number || unit.id}</div>
+                      </div>
+
+                      {/* Dynamic Hover Overlay */}
+                      <div
+                        className="unit-overlay"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                          color: 'white',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          opacity: hoveredUnitId === unit.id ? 1 : 0,
+                          transition: 'opacity 0.2s ease-in-out',
+                          padding: '1rem',
+                          textAlign: 'center',
+                          pointerEvents: hoveredUnitId === unit.id ? 'auto' : 'none'
+                        }}
+                      >
+>>>>>>> REPLACE
