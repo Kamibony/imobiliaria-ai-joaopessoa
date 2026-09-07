@@ -55,7 +55,13 @@ const PublicProjectDetail = () => {
   }, [id]);
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Carregando detalhes do projeto...</div>;
+    return (
+      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--color-bg)' }}>
+        <p style={{ fontFamily: 'var(--font-sans)', color: 'var(--color-text-muted)', fontSize: '1.2rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          Carregando Projeto...
+        </p>
+      </div>
+    );
   }
 
   if (!project) return null;
@@ -80,141 +86,254 @@ const PublicProjectDetail = () => {
   };
 
   return (
-    <div className="public-project-detail" style={{ fontFamily: 'sans-serif' }}>
+    <div className="public-project-detail fade-in">
       {/* Header / Hero Image */}
       <div
         style={{
           width: '100%',
-          height: '60vh',
-          backgroundColor: '#1f2937',
+          height: '70vh',
+          backgroundColor: 'var(--color-black)',
           position: 'relative',
           display: 'flex',
-          alignItems: 'flex-end',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
           color: 'white',
-          padding: '2rem'
+          padding: '4rem 2rem',
+          boxSizing: 'border-box'
         }}
       >
-        {heroImageUrl && (
+        {heroImageUrl ? (
           <img
             src={heroImageUrl}
             alt={project.name}
             style={{
               position: 'absolute',
               top: 0, left: 0, width: '100%', height: '100%',
-              objectFit: 'cover', opacity: 0.6
+              objectFit: 'cover', opacity: 0.5
             }}
           />
+        ) : (
+          <div className="image-placeholder" style={{ position: 'absolute', top: 0, left: 0, opacity: 0.2 }} />
         )}
-        <div style={{ position: 'relative', zIndex: 1, padding: '1rem', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '8px' }}>
-          <button onClick={() => navigate('/')} style={{ marginBottom: '1rem', background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold' }}>
-            ← Voltar para a Revista
+
+        {/* Navbar-ish back button */}
+        <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 10 }}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              background: 'rgba(0,0,0,0.5)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              backdropFilter: 'blur(10px)',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1.25rem',
+              borderRadius: '9999px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontSize: '0.8rem'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
+          >
+            &larr; Voltar
           </button>
-          <h1 style={{ fontSize: '3rem', margin: '0 0 0.5rem 0', textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+        </div>
+
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+            {project.location?.neighborhood && (
+              <span className="badge badge-gold" style={{ fontSize: '0.85rem' }}>
+                {getLocalizedText(project.location.neighborhood, language)}
+              </span>
+            )}
+            {project.status && (
+              <span className="badge badge-dark" style={{ border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.85rem' }}>
+                {getLocalizedText(project.status, language)}
+              </span>
+            )}
+          </div>
+          <h1 style={{ color: 'white', fontSize: '4rem', marginBottom: '0.5rem', textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
             {project.name || 'Sem Título'}
           </h1>
-          <p style={{ fontSize: '1.25rem', margin: 0, textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
-            {getLocalizedText(project.location?.neighborhood, language) || 'Bairro N/A'}
+          <p style={{ fontSize: '1.5rem', fontFamily: 'var(--font-sans)', fontWeight: '300', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.5)', color: '#e5e7eb' }}>
+            Por {project.developer || 'Construtora não informada'}
           </p>
         </div>
       </div>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
-        {/* Descriptive Text & Amenities */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', marginBottom: '3rem' }}>
-          <div style={{ flex: 1, minWidth: '300px' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#1f2937' }}>Detalhes do Empreendimento</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '1.1rem', color: '#4b5563' }}>
-              <p><strong>Construtora:</strong> {project.developer || 'N/A'}</p>
-              <p><strong>Status:</strong> {getLocalizedText(project.status, language) || 'N/A'}</p>
-              <p><strong>Entrega:</strong> {project.delivery_date ? new Date(project.delivery_date).toLocaleDateString() : 'N/A'}</p>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '4rem 2rem' }}>
+
+        {/* Layout Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '5rem' }}>
+
+          {/* General Info Card */}
+          <div style={{
+            backgroundColor: 'var(--color-surface)',
+            padding: '3rem',
+            borderRadius: '16px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.03)',
+            border: '1px solid #eaeaea'
+          }}>
+            <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Ficha Técnica</h2>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+              <div>
+                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Construtora</p>
+                <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>{project.developer || 'N/A'}</p>
+              </div>
+              <div>
+                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</p>
+                <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>{getLocalizedText(project.status, language) || 'N/A'}</p>
+              </div>
+              <div>
+                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entrega Prevista</p>
+                <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>
+                  {project.delivery_date ? new Date(project.delivery_date).toLocaleDateString('pt-BR') : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Localização</p>
+                <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>
+                  {getLocalizedText(project.location?.neighborhood, language) || 'N/A'}
+                </p>
+              </div>
             </div>
           </div>
 
+          {/* Amenities Card */}
           {Array.isArray(project.amenities) && project.amenities.length > 0 && (
-            <div style={{ flex: 1, minWidth: '300px' }}>
-              <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#1f2937' }}>Comodidades</h2>
-              <ul style={{ listStyleType: 'disc', paddingLeft: '1.5rem', fontSize: '1.1rem', color: '#4b5563' }}>
+            <div style={{
+              backgroundColor: 'var(--color-surface)',
+              padding: '3rem',
+              borderRadius: '16px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.03)',
+              border: '1px solid #eaeaea'
+            }}>
+              <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Comodidades</h2>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                 {project.amenities.map((amenity, index) => (
-                  <li key={index} style={{ marginBottom: '0.25rem' }}>{amenity}</li>
+                  <span key={index} style={{
+                    backgroundColor: '#f3f4f6',
+                    color: 'var(--color-charcoal)',
+                    padding: '0.5rem 1.25rem',
+                    borderRadius: '9999px',
+                    fontSize: '0.95rem',
+                    fontWeight: '500',
+                    border: '1px solid #e5e7eb'
+                  }}>
+                    {amenity}
+                  </span>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </div>
 
         {/* Smart Canvas Unit Grid */}
         <div>
-          <h2 style={{ fontSize: '2rem', marginBottom: '1.5rem', color: '#1f2937' }}>Unidades Disponíveis</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: '2px solid var(--color-black)', paddingBottom: '1rem' }}>
+            <h2 style={{ fontSize: '2.5rem', margin: 0 }}>Smart Canvas</h2>
+            <p style={{ color: 'var(--color-text-muted)', margin: 0, fontWeight: '500' }}>{units.length} Unidades Disponíveis</p>
+          </div>
+
           {units.length === 0 ? (
-            <p>Nenhuma unidade encontrada para este empreendimento.</p>
+            <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--color-surface)', borderRadius: '16px', border: '1px dashed #ccc' }}>
+              <p style={{ fontSize: '1.2rem', color: 'var(--color-text-muted)' }}>Nenhuma unidade catalogada para este empreendimento no momento.</p>
+            </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
               {units.map(unit => {
                 const latest = getLatestSnapshot(unit);
                 const priceFormatted = latest && latest.price_brl ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(latest.price_brl) : 'Sob Consulta';
-                const areaFormatted = unit.area_m2 ? `${unit.area_m2}m²` : '-';
+                const areaFormatted = unit.area_m2 ? `${unit.area_m2}m²` : 'Área N/A';
 
                 return (
                   <div
                     key={unit.id}
                     style={{
                       position: 'relative',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
+                      border: '1px solid #eaeaea',
+                      borderRadius: '12px',
                       overflow: 'hidden',
-                      backgroundColor: '#f9fafb',
-                      height: '250px',
+                      backgroundColor: 'var(--color-surface)',
+                      height: '280px',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
                       alignItems: 'center',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                      transition: 'all 0.3s ease'
                     }}
                     onMouseEnter={() => setHoveredUnitId(unit.id)}
                     onMouseLeave={() => setHoveredUnitId(null)}
                   >
-                    <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280' }}>
-                      <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📐</div>
-                      <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: '#374151' }}>Unidade {unit.unit_number || unit.id}</div>
+                    {/* Default State */}
+                    <div style={{ padding: '2rem', textAlign: 'center', transition: 'opacity 0.3s ease', opacity: hoveredUnitId === unit.id ? 0 : 1 }}>
+                      <p style={{ margin: '0 0 1rem 0', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.85rem' }}>Unidade</p>
+                      <div style={{ fontWeight: '600', fontSize: '3rem', color: 'var(--color-black)', fontFamily: 'var(--font-serif)', lineHeight: 1 }}>
+                        {unit.unit_number || unit.id}
+                      </div>
+                      <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                        <span>{areaFormatted}</span>
+                        <span>&bull;</span>
+                        <span>{unit.bedrooms || '-'} Quartos</span>
+                      </div>
                     </div>
 
+                    {/* Hover State Overlay */}
                     <div
                       style={{
                         position: 'absolute',
                         top: 0, left: 0, width: '100%', height: '100%',
-                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                        backgroundColor: 'rgba(17, 17, 17, 0.98)',
+                        backdropFilter: 'blur(5px)',
                         color: 'white',
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'center',
                         alignItems: 'center',
                         opacity: hoveredUnitId === unit.id ? 1 : 0,
-                        transition: 'opacity 0.2s ease-in-out',
-                        padding: '1.5rem',
+                        transition: 'opacity 0.3s ease-in-out',
+                        padding: '2rem',
                         textAlign: 'center',
                         pointerEvents: hoveredUnitId === unit.id ? 'auto' : 'none'
                       }}
                     >
-                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#10b981' }}>{priceFormatted}</div>
-                      <div style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>{areaFormatted} • {unit.bedrooms || '-'} Quartos</div>
-                      <div style={{ fontSize: '1rem', color: '#9ca3af', marginBottom: '1.5rem' }}>Disponível</div>
+                      <div style={{ fontSize: '2rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-accent-gold)', fontFamily: 'var(--font-serif)' }}>
+                        {priceFormatted}
+                      </div>
+                      <div style={{ fontSize: '1rem', marginBottom: '2rem', color: '#e5e7eb' }}>
+                        {areaFormatted} &bull; {unit.bedrooms || '-'} Quartos
+                      </div>
 
                       <button
                         onClick={() => handleWhatsAppContact(unit, priceFormatted)}
                         style={{
-                          padding: '0.75rem 1.5rem',
-                          fontSize: '1rem',
-                          fontWeight: 'bold',
+                          padding: '0.8rem 1.5rem',
+                          fontSize: '0.95rem',
+                          fontWeight: '600',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
                           cursor: 'pointer',
-                          backgroundColor: '#25D366',
+                          backgroundColor: 'var(--color-accent-gold)',
                           color: 'white',
                           border: 'none',
-                          borderRadius: '4px',
+                          borderRadius: '9999px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '0.5rem'
+                          gap: '0.5rem',
+                          boxShadow: '0 4px 15px rgba(197, 168, 128, 0.3)'
                         }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold-hover)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold)'}
                       >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                        </svg>
                         Falar com Corretor
                       </button>
                     </div>

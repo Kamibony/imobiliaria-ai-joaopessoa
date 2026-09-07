@@ -31,26 +31,74 @@ const ProjectCard = ({ project }) => {
       className="public-project-card"
       style={{
         cursor: 'pointer',
-        minWidth: '300px',
-        border: '1px solid #e5e7eb',
-        borderRadius: '8px',
+        minWidth: '320px',
+        backgroundColor: 'var(--color-surface)',
+        border: '1px solid #eaeaea',
+        borderRadius: '12px',
         overflow: 'hidden',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
+        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+        display: 'flex',
+        flexDirection: 'column'
       }}
       onClick={() => navigate(`/projetos/${project.id}`)}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-5px)';
+        e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.1)';
+        const img = e.currentTarget.querySelector('.card-image');
+        if (img) img.style.transform = 'scale(1.05)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.05)';
+        const img = e.currentTarget.querySelector('.card-image');
+        if (img) img.style.transform = 'scale(1)';
+      }}
     >
-      <div style={{ height: '200px', backgroundColor: '#f3f4f6', overflow: 'hidden' }}>
+      <div style={{ height: '240px', overflow: 'hidden', position: 'relative' }}>
         {heroImageUrl ? (
-          <img src={heroImageUrl} alt={project.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img
+            className="card-image"
+            src={heroImageUrl}
+            alt={project.name}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transition: 'transform 0.5s ease'
+            }}
+          />
         ) : (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#9ca3af' }}>Sem Imagem</div>
+          <div className="image-placeholder">Em Breve</div>
         )}
+
+        {/* Badges Overlay */}
+        <div style={{ position: 'absolute', top: '1rem', left: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {project.location?.neighborhood && (
+            <span className="badge badge-dark">
+              {getLocalizedText(project.location.neighborhood, language)}
+            </span>
+          )}
+          {project.status && (
+            <span className="badge badge-gold">
+              {getLocalizedText(project.status, language)}
+            </span>
+          )}
+        </div>
       </div>
-      <div style={{ padding: '1rem' }}>
-        <h3 style={{ margin: '0 0 0.5rem 0' }}>{project.name || 'Sem Título'}</h3>
-        <p style={{ margin: '0 0 0.25rem 0', color: '#4b5563' }}><strong>Construtora:</strong> {project.developer || 'N/A'}</p>
-        <p style={{ margin: '0 0 0.25rem 0', color: '#4b5563' }}><strong>Bairro:</strong> {getLocalizedText(project.location?.neighborhood, language) || 'N/A'}</p>
-        <p style={{ margin: 0, color: '#4b5563' }}><strong>Status:</strong> {getLocalizedText(project.status, language) || 'N/A'}</p>
+
+      <div style={{ padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--color-black)', fontSize: '1.25rem' }}>
+          {project.name || 'Sem Título'}
+        </h3>
+        <p style={{ margin: '0 0 1rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+          Por {project.developer || 'Construtora não informada'}
+        </p>
+
+        <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #eaeaea', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--color-black)' }}>Explorar Projeto</span>
+          <span style={{ color: 'var(--color-accent-gold)' }}>&rarr;</span>
+        </div>
       </div>
     </div>
   );
@@ -74,9 +122,12 @@ const PublicHome = () => {
 
       setProjects(projectsData);
 
+      // Prefer projects with actual hero images for the featured spot
       const featured = projectsData.find(p => p.assets?.hero_images?.length > 0);
       if (featured) {
         setFeaturedProject(featured);
+      } else if (projectsData.length > 0) {
+        setFeaturedProject(projectsData[0]);
       }
     });
 
@@ -108,13 +159,13 @@ const PublicHome = () => {
   }, [projects, filterBairro, language]);
 
   return (
-    <div className="public-home" style={{ fontFamily: 'sans-serif' }}>
+    <div className="public-home fade-in">
       {/* Hero Section */}
       <div
         className="hero-section"
         style={{
-          height: '60vh',
-          backgroundColor: '#1f2937',
+          height: '80vh',
+          backgroundColor: 'var(--color-black)',
           position: 'relative',
           display: 'flex',
           alignItems: 'center',
@@ -124,54 +175,69 @@ const PublicHome = () => {
           overflow: 'hidden'
         }}
       >
-        {featuredImageUrl && (
+        {featuredImageUrl ? (
           <img
             src={featuredImageUrl}
             alt={featuredProject?.name}
             style={{
               position: 'absolute',
               top: 0, left: 0, width: '100%', height: '100%',
-              objectFit: 'cover', opacity: 0.5
+              objectFit: 'cover', opacity: 0.4
             }}
           />
+        ) : (
+          <div style={{
+            position: 'absolute',
+            top: 0, left: 0, width: '100%', height: '100%',
+            background: 'linear-gradient(135deg, #1c1c1c 0%, #2c2c2c 100%)', opacity: 0.8
+          }} />
         )}
-        <div style={{ position: 'relative', zIndex: 1, padding: '2rem' }}>
-          <h1 style={{ fontSize: '3rem', marginBottom: '1rem', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>
-            Digital Magazine João Pessoa
+
+        <div style={{ position: 'relative', zIndex: 1, padding: '2rem', maxWidth: '800px' }}>
+          <h1 style={{ color: 'white', marginBottom: '1.5rem', textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+            O Exclusivo de João Pessoa
           </h1>
-          <p style={{ fontSize: '1.25rem', maxWidth: '600px', margin: '0 auto', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>
-            Descubra os melhores lançamentos e oportunidades de investimento imobiliário na região.
+          <p style={{ fontSize: '1.25rem', fontFamily: 'var(--font-sans)', fontWeight: '300', margin: '0 auto 2.5rem', color: '#e5e7eb', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+            Uma curadoria premium dos melhores lançamentos e oportunidades de investimento imobiliário de alto padrão na região.
           </p>
           {featuredProject && (
             <button
               onClick={() => navigate(`/projetos/${featuredProject.id}`)}
               style={{
-                marginTop: '2rem', padding: '0.75rem 1.5rem', fontSize: '1rem', fontWeight: 'bold',
-                backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
+                padding: '1rem 2rem',
+                fontSize: '1.1rem',
+                backgroundColor: 'var(--color-accent-gold)',
+                color: 'white',
+                border: 'none',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
               }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold)'}
             >
-              Ver Destaque: {featuredProject.name}
+              Descobrir {featuredProject.name}
             </button>
           )}
         </div>
       </div>
 
-      <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ padding: '4rem 2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* Filters */}
-        <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <strong style={{ fontSize: '1.1rem' }}>Filtrar por Bairro:</strong>
-          {['All', 'Cabo Branco', 'Tambaú', 'Manaíra'].map(bairro => (
+        <div style={{ marginBottom: '3rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-serif)', color: 'var(--color-text-main)' }}>Filtrar por Região:</strong>
+          {['All', 'Cabo Branco', 'Tambaú', 'Manaíra', 'Bessa'].map(bairro => (
             <button
               key={bairro}
               onClick={() => setFilterBairro(bairro)}
               style={{
-                padding: '0.5rem 1rem',
+                padding: '0.5rem 1.25rem',
                 borderRadius: '9999px',
-                border: filterBairro === bairro ? 'none' : '1px solid #d1d5db',
-                backgroundColor: filterBairro === bairro ? '#3b82f6' : 'white',
-                color: filterBairro === bairro ? 'white' : '#374151',
-                cursor: 'pointer',
-                fontWeight: filterBairro === bairro ? 'bold' : 'normal'
+                border: filterBairro === bairro ? `1px solid var(--color-black)` : '1px solid #d1d5db',
+                backgroundColor: filterBairro === bairro ? 'var(--color-black)' : 'transparent',
+                color: filterBairro === bairro ? 'white' : 'var(--color-text-main)',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: filterBairro === bairro ? '500' : '400',
               }}
             >
               {bairro === 'All' ? 'Todos' : bairro}
@@ -180,23 +246,31 @@ const PublicHome = () => {
         </div>
 
         {/* Curated Rows */}
-        <div style={{ marginBottom: '3rem' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Destaques do Mês</h2>
-          <div style={{ display: 'flex', overflowX: 'auto', gap: '1.5rem', paddingBottom: '1rem' }}>
+        <div style={{ marginBottom: '5rem' }}>
+          <h2 style={{ marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Destaques do Mês</h2>
+          <div style={{ display: 'flex', overflowX: 'auto', gap: '2rem', paddingBottom: '2rem', paddingLeft: '0.5rem', paddingRight: '0.5rem', scrollSnapType: 'x mandatory' }}>
             {filteredProjects.slice(0, 5).map(project => (
-              <ProjectCard key={project.id} project={project} />
+              <div key={project.id} style={{ scrollSnapAlign: 'start' }}>
+                <ProjectCard project={project} />
+              </div>
             ))}
-            {filteredProjects.length === 0 && <p>Nenhum projeto encontrado.</p>}
+            {filteredProjects.length === 0 && (
+              <p style={{ color: 'var(--color-text-muted)' }}>Nenhum projeto encontrado para esta região.</p>
+            )}
           </div>
         </div>
 
         <div>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Oportunidades para Investidores</h2>
-          <div style={{ display: 'flex', overflowX: 'auto', gap: '1.5rem', paddingBottom: '1rem' }}>
+          <h2 style={{ marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Oportunidades para Investidores</h2>
+          <div style={{ display: 'flex', overflowX: 'auto', gap: '2rem', paddingBottom: '2rem', paddingLeft: '0.5rem', paddingRight: '0.5rem', scrollSnapType: 'x mandatory' }}>
             {filteredProjects.slice(5, 10).map(project => (
-              <ProjectCard key={project.id} project={project} />
+              <div key={project.id} style={{ scrollSnapAlign: 'start' }}>
+                <ProjectCard project={project} />
+              </div>
             ))}
-            {filteredProjects.length <= 5 && <p>Nenhum projeto adicional encontrado.</p>}
+            {filteredProjects.length <= 5 && (
+              <p style={{ color: 'var(--color-text-muted)' }}>Explore nossos destaques acima para encontrar as melhores oportunidades.</p>
+            )}
           </div>
         </div>
       </div>
