@@ -90,16 +90,18 @@ const PublicProjectDetail = () => {
       {/* Header / Hero Image */}
       <div
         style={{
-          width: '100%',
-          height: '70vh',
-          backgroundColor: 'var(--color-black)',
+          width: '100vw',
+          minHeight: '70vh',
+          backgroundColor: 'transparent',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-end',
           color: 'white',
           padding: '4rem 2rem',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          marginLeft: 'calc(-50vw + 50%)',
+          marginRight: 'calc(-50vw + 50%)',
         }}
       >
         {heroImageUrl ? (
@@ -109,12 +111,22 @@ const PublicProjectDetail = () => {
             style={{
               position: 'absolute',
               top: 0, left: 0, width: '100%', height: '100%',
-              objectFit: 'cover', opacity: 0.5
+              objectFit: 'cover', zIndex: 0
             }}
           />
         ) : (
-          <div className="image-placeholder" style={{ position: 'absolute', top: 0, left: 0, opacity: 0.2 }} />
+          <div className="image-placeholder" style={{ position: 'absolute', top: 0, left: 0, opacity: 0.2, zIndex: 0 }} />
         )}
+
+        {/* Gradient Overlay */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, width: '100%', height: '100%',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 60%)',
+            zIndex: 1
+          }}
+        />
 
         {/* Navbar-ish back button */}
         <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 10 }}>
@@ -142,7 +154,7 @@ const PublicProjectDetail = () => {
           </button>
         </div>
 
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
             {project.location?.neighborhood && (
               <span className="badge badge-gold" style={{ fontSize: '0.85rem' }}>
@@ -155,7 +167,7 @@ const PublicProjectDetail = () => {
               </span>
             )}
           </div>
-          <h1 style={{ color: 'white', fontSize: '4rem', marginBottom: '0.5rem', textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+          <h1 style={{ color: 'white', fontSize: '4rem', marginBottom: '0.5rem', fontFamily: 'var(--font-serif)', textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
             {project.name || 'Sem Título'}
           </h1>
           <p style={{ fontSize: '1.5rem', fontFamily: 'var(--font-sans)', fontWeight: '300', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.5)', color: '#e5e7eb' }}>
@@ -173,11 +185,10 @@ const PublicProjectDetail = () => {
           <div style={{
             backgroundColor: 'var(--color-surface)',
             padding: '3rem',
-            borderRadius: '16px',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.03)',
-            border: '1px solid #eaeaea'
+            borderRadius: '4px',
+            border: '1px solid #e5e7eb'
           }}>
-            <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Ficha Técnica</h2>
+            <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Ficha Técnica</h2>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
               <div>
@@ -208,25 +219,20 @@ const PublicProjectDetail = () => {
             <div style={{
               backgroundColor: 'var(--color-surface)',
               padding: '3rem',
-              borderRadius: '16px',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.03)',
-              border: '1px solid #eaeaea'
+              borderRadius: '4px',
+              border: '1px solid #e5e7eb'
             }}>
-              <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Comodidades</h2>
+              <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Comodidades</h2>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                 {project.amenities.map((amenity, index) => (
-                  <span key={index} style={{
-                    backgroundColor: '#f3f4f6',
+                  <div key={index} style={{
                     color: 'var(--color-charcoal)',
-                    padding: '0.5rem 1.25rem',
-                    borderRadius: '9999px',
-                    fontSize: '0.95rem',
-                    fontWeight: '500',
-                    border: '1px solid #e5e7eb'
+                    fontSize: '1rem',
+                    fontWeight: '400',
                   }}>
                     {amenity}
-                  </span>
+                  </div>
                 ))}
               </div>
             </div>
@@ -236,7 +242,7 @@ const PublicProjectDetail = () => {
         {/* Smart Canvas Unit Grid */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: '2px solid var(--color-black)', paddingBottom: '1rem' }}>
-            <h2 style={{ fontSize: '2.5rem', margin: 0 }}>Smart Canvas</h2>
+            <h2 style={{ fontSize: '2.5rem', margin: 0, fontFamily: 'var(--font-serif)' }}>Smart Canvas</h2>
             <p style={{ color: 'var(--color-text-muted)', margin: 0, fontWeight: '500' }}>{units.length} Unidades Disponíveis</p>
           </div>
 
@@ -256,8 +262,8 @@ const PublicProjectDetail = () => {
                     key={unit.id}
                     style={{
                       position: 'relative',
-                      border: '1px solid #eaeaea',
-                      borderRadius: '12px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '4px',
                       overflow: 'hidden',
                       backgroundColor: 'var(--color-surface)',
                       height: '280px',
@@ -265,7 +271,6 @@ const PublicProjectDetail = () => {
                       flexDirection: 'column',
                       justifyContent: 'center',
                       alignItems: 'center',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
                       transition: 'all 0.3s ease'
                     }}
                     onMouseEnter={() => setHoveredUnitId(unit.id)}
@@ -322,11 +327,10 @@ const PublicProjectDetail = () => {
                           backgroundColor: 'var(--color-accent-gold)',
                           color: 'white',
                           border: 'none',
-                          borderRadius: '9999px',
+                          borderRadius: '4px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '0.5rem',
-                          boxShadow: '0 4px 15px rgba(197, 168, 128, 0.3)'
+                          gap: '0.5rem'
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold-hover)'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold)'}

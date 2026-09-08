@@ -33,24 +33,23 @@ const ProjectCard = ({ project }) => {
         cursor: 'pointer',
         minWidth: '320px',
         backgroundColor: 'var(--color-surface)',
-        border: '1px solid #eaeaea',
-        borderRadius: '12px',
+        border: '1px solid #e5e7eb',
+        borderRadius: '4px',
         overflow: 'hidden',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+        transition: 'all 0.3s ease',
         display: 'flex',
         flexDirection: 'column'
       }}
       onClick={() => navigate(`/projetos/${project.id}`)}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-5px)';
-        e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.1)';
+        const title = e.currentTarget.querySelector('.card-title');
+        if (title) title.style.color = 'var(--color-accent-gold)';
         const img = e.currentTarget.querySelector('.card-image');
-        if (img) img.style.transform = 'scale(1.05)';
+        if (img) img.style.transform = 'scale(1.02)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.05)';
+        const title = e.currentTarget.querySelector('.card-title');
+        if (title) title.style.color = 'var(--color-black)';
         const img = e.currentTarget.querySelector('.card-image');
         if (img) img.style.transform = 'scale(1)';
       }}
@@ -88,14 +87,14 @@ const ProjectCard = ({ project }) => {
       </div>
 
       <div style={{ padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--color-black)', fontSize: '1.25rem' }}>
+        <h3 className="card-title" style={{ margin: '0 0 0.5rem 0', color: 'var(--color-black)', fontSize: '1.25rem', transition: 'color 0.3s ease' }}>
           {project.name || 'Sem Título'}
         </h3>
         <p style={{ margin: '0 0 1rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
           Por {project.developer || 'Construtora não informada'}
         </p>
 
-        <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #eaeaea', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--color-black)' }}>Explorar Projeto</span>
           <span style={{ color: 'var(--color-accent-gold)' }}>&rarr;</span>
         </div>
@@ -164,15 +163,18 @@ const PublicHome = () => {
       <div
         className="hero-section"
         style={{
+          width: '100vw',
           height: '80vh',
-          backgroundColor: 'var(--color-black)',
+          backgroundColor: 'transparent',
           position: 'relative',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: 'white',
           textAlign: 'center',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          marginLeft: 'calc(-50vw + 50%)',
+          marginRight: 'calc(-50vw + 50%)',
         }}
       >
         {featuredImageUrl ? (
@@ -182,18 +184,28 @@ const PublicHome = () => {
             style={{
               position: 'absolute',
               top: 0, left: 0, width: '100%', height: '100%',
-              objectFit: 'cover', opacity: 0.4
+              objectFit: 'cover', zIndex: 0
             }}
           />
         ) : (
           <div style={{
             position: 'absolute',
             top: 0, left: 0, width: '100%', height: '100%',
-            background: 'linear-gradient(135deg, #1c1c1c 0%, #2c2c2c 100%)', opacity: 0.8
+            background: 'linear-gradient(135deg, #1c1c1c 0%, #2c2c2c 100%)', opacity: 0.8, zIndex: 0
           }} />
         )}
 
-        <div style={{ position: 'relative', zIndex: 1, padding: '2rem', maxWidth: '800px' }}>
+        {/* Gradient Overlay */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, width: '100%', height: '100%',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 60%)',
+            zIndex: 1
+          }}
+        />
+
+        <div style={{ position: 'relative', zIndex: 2, padding: '2rem', maxWidth: '800px' }}>
           <h1 style={{ color: 'white', marginBottom: '1.5rem', textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
             O Exclusivo de João Pessoa
           </h1>
@@ -209,9 +221,9 @@ const PublicHome = () => {
                 backgroundColor: 'var(--color-accent-gold)',
                 color: 'white',
                 border: 'none',
+                borderRadius: '4px',
                 textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                letterSpacing: '0.1em'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold-hover)'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold)'}
@@ -225,7 +237,7 @@ const PublicHome = () => {
       <div style={{ padding: '4rem 2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* Filters */}
         <div style={{ marginBottom: '3rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-serif)', color: 'var(--color-text-main)' }}>Filtrar por Região:</strong>
+          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-sans)', color: 'var(--color-text-main)' }}>Filtrar por Região:</strong>
           {['All', 'Cabo Branco', 'Tambaú', 'Manaíra', 'Bessa'].map(bairro => (
             <button
               key={bairro}
