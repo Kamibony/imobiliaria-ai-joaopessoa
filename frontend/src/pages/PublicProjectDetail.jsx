@@ -24,7 +24,9 @@ const PublicProjectDetail = () => {
           const data = { id: docSnap.id, ...docSnap.data() };
           setProject(data);
 
-          if (data.assets?.hero_images && data.assets.hero_images.length > 0) {
+          if (data.manual_hero_image_url) {
+            setHeroImageUrl(data.manual_hero_image_url);
+          } else if (data.assets?.hero_images && data.assets.hero_images.length > 0) {
             const storage = getStorage();
             const fileRef = ref(storage, data.assets.hero_images[0]);
             const downloadURL = await getDownloadURL(fileRef);

@@ -11,7 +11,9 @@ const ProjectCard = ({ project }) => {
   const [heroImageUrl, setHeroImageUrl] = useState(null);
 
   useEffect(() => {
-    if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
+    if (project?.manual_hero_image_url) {
+      setHeroImageUrl(project.manual_hero_image_url);
+    } else if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
       const fetchHeroImage = async () => {
         try {
           const storage = getStorage();
@@ -23,6 +25,8 @@ const ProjectCard = ({ project }) => {
         }
       };
       fetchHeroImage();
+    } else {
+      setHeroImageUrl(null);
     }
   }, [project]);
 
@@ -122,7 +126,7 @@ const PublicHome = () => {
       setProjects(projectsData);
 
       // Prefer projects with actual hero images for the featured spot
-      const featured = projectsData.find(p => p.assets?.hero_images?.length > 0);
+      const featured = projectsData.find(p => p.manual_hero_image_url || (p.assets?.hero_images && p.assets.hero_images.length > 0));
       if (featured) {
         setFeaturedProject(featured);
       } else if (projectsData.length > 0) {
@@ -134,7 +138,9 @@ const PublicHome = () => {
   }, []);
 
   useEffect(() => {
-    if (featuredProject?.assets?.hero_images && featuredProject.assets.hero_images.length > 0) {
+    if (featuredProject?.manual_hero_image_url) {
+      setFeaturedImageUrl(featuredProject.manual_hero_image_url);
+    } else if (featuredProject?.assets?.hero_images && featuredProject.assets.hero_images.length > 0) {
       const fetchHeroImage = async () => {
         try {
           const storage = getStorage();
@@ -146,6 +152,8 @@ const PublicHome = () => {
         }
       };
       fetchHeroImage();
+    } else {
+      setFeaturedImageUrl(null);
     }
   }, [featuredProject]);
 

@@ -3,7 +3,7 @@ import { LanguageProvider, useLanguage, getLocalizedText } from '../LanguageCont
 import React, { useState, useEffect, useMemo } from 'react'
 import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs, updateDoc, setDoc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
-import { getStorage, ref, getDownloadURL } from 'firebase/storage'
+import { getStorage, ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import L from 'leaflet'
@@ -19,8 +19,14 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
   const [heroImageUrl, setHeroImageUrl] = useState(null);
   const [hoveredUnitId, setHoveredUnitId] = useState(null);
 
+  const [overrideImageUrl, setOverrideImageUrl] = useState(project?.manual_hero_image_url || '');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   useEffect(() => {
-    if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
+    if (project?.manual_hero_image_url) {
+      setHeroImageUrl(project.manual_hero_image_url);
+    } else if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
       const fetchHeroImage = async () => {
         try {
           const storage = getStorage();
@@ -35,7 +41,60 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
     } else {
       setHeroImageUrl(null);
     }
+
+    setOverrideImageUrl(project?.manual_hero_image_url || '');
   }, [project]);
+
+  const handleSaveOverrideImage = async () => {
+    try {
+      await updateDoc(doc(db, 'projects', project.id), {
+        manual_hero_image_url: overrideImageUrl
+      });
+      alert('Hero Image atualizada com sucesso!');
+    } catch (err) {
+      console.error("Erro ao salvar Hero Image:", err);
+      alert('Erro ao salvar imagem.');
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const storage = getStorage();
+    const storageRef = ref(storage, `hero_images/${project.id}/${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      },
+      (error) => {
+        console.error("Upload error:", error);
+        alert('Falha no upload da imagem.');
+        setUploadingImage(false);
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        setOverrideImageUrl(downloadURL);
+        try {
+          await updateDoc(doc(db, 'projects', project.id), {
+            manual_hero_image_url: downloadURL
+          });
+          alert('Upload concluído e imagem atualizada!');
+        } catch (err) {
+          console.error("Erro ao salvar Hero Image após upload:", err);
+          alert('Erro ao salvar URL da imagem após o upload.');
+        } finally {
+          setUploadingImage(false);
+          setUploadProgress(0);
+        }
+      }
+    );
+  };
 
   useEffect(() => {
     if (!project || !project.id) return;
@@ -88,6 +147,40 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
               <img src={heroImageUrl} alt="Project Hero Render" style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'cover' }} />
             </div>
           )}
+
+          <div style={{ marginBottom: '2rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Override de Hero Image</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Colar URL Externa:</label>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <input
+                    type="text"
+                    value={overrideImageUrl}
+                    onChange={(e) => setOverrideImageUrl(e.target.value)}
+                    placeholder="https://..."
+                    style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                  />
+                  <button
+                    onClick={handleSaveOverrideImage}
+                    style={{ padding: '0.5rem 1rem', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Salvar URL
+                  </button>
+                </div>
+              </div>
+              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Ou Fazer Upload (.jpg, .png):</label>
+                <input
+                  type="file"
+                  accept="image/jpeg, image/png"
+                  onChange={handleFileUpload}
+                  disabled={uploadingImage}
+                />
+                {uploadingImage && <div style={{ marginTop: '0.5rem', color: '#007bff' }}>Upload: {Math.round(uploadProgress)}%</div>}
+              </div>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '300px' }}>
