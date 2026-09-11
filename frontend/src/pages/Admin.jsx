@@ -305,9 +305,25 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
 
 const ProjectCard = ({ project, onSelectProject }) => {
   const { language } = useLanguage();
+  const [showImageOverride, setShowImageOverride] = useState(false);
+  const [overrideImageUrl, setOverrideImageUrl] = useState(project?.manual_hero_image_url || '');
 
   const hasBookData = project.amenities?.length > 0 || project.ai_context?.investment_roi_estimated_percent != null;
   const hasTabelaData = !!project.has_units;
+
+  const handleSaveOverrideImage = async (e) => {
+    e.stopPropagation();
+    try {
+      await updateDoc(doc(db, 'projects', project.id), {
+        manual_hero_image_url: overrideImageUrl
+      });
+      alert('Hero Image atualizada com sucesso!');
+      setShowImageOverride(false);
+    } catch (err) {
+      console.error("Erro ao salvar Hero Image:", err);
+      alert('Erro ao salvar imagem.');
+    }
+  };
 
   return (
     <div className="property-card" style={{ cursor: 'pointer' }} onClick={() => onSelectProject(project)}>
@@ -330,7 +346,43 @@ const ProjectCard = ({ project, onSelectProject }) => {
         )}
       </div>
 
-      <div style={{ marginTop: '1rem', color: '#007bff', fontWeight: 'bold' }}>
+      <div className="mt-4 pt-4 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+        {!showImageOverride ? (
+          <button
+            onClick={() => setShowImageOverride(true)}
+            className="text-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors w-full mb-2"
+          >
+            📸 Alterar Imagem de Capa
+          </button>
+        ) : (
+          <div className="flex flex-col gap-2 mb-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <label className="text-xs font-semibold text-gray-600">URL da Imagem:</label>
+            <input
+              type="text"
+              value={overrideImageUrl}
+              onChange={(e) => setOverrideImageUrl(e.target.value)}
+              placeholder="https://exemplo.com/imagem.jpg"
+              className="text-sm p-2 rounded border border-gray-300 w-full"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveOverrideImage}
+                className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex-1"
+              >
+                Salvar URL
+              </button>
+              <button
+                onClick={() => setShowImageOverride(false)}
+                className="text-sm px-3 py-1 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: '0.5rem', color: '#007bff', fontWeight: 'bold' }}>
         Ver Detalhes e Unidades ➔
       </div>
     </div>
@@ -616,37 +668,39 @@ function Admin() {
   };
 
   if (authLoading) {
-    return <div className="admin-container"><p>Carregando...</p></div>;
+    return <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col items-center w-full"><p className="text-gray-600">Carregando...</p></div>;
   }
 
   if (!user) {
     return (
-      <div className="admin-container">
-        <h1>Login - Imobiliária AI</h1>
-        <div className="card">
+      <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col items-center w-full">
+        <h1 className="text-3xl font-bold mb-8">Login - Imobiliária AI</h1>
+        <div className="bg-white rounded-xl shadow border border-gray-200 p-6 w-full max-w-md">
           <form onSubmit={handleLogin}>
-            <div className="form-group">
-              <label htmlFor="email">Email</label>
+            <div className="flex flex-col text-left mb-4">
+              <label htmlFor="email" className="font-semibold mb-2 text-gray-700">Email</label>
               <input
                 type="email"
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-black"
                 required
               />
             </div>
-            <div className="form-group">
-              <label htmlFor="password">Senha</label>
+            <div className="flex flex-col text-left mb-6">
+              <label htmlFor="password" className="font-semibold mb-2 text-gray-700">Senha</label>
               <input
                 type="password"
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-black"
                 required
               />
             </div>
-            {authError && <div className="message error">{authError}</div>}
-            <button type="submit" className="submit-btn">Entrar</button>
+            {authError && <div className="mt-2 mb-4 p-3 rounded bg-red-100 text-red-700 border border-red-200">{authError}</div>}
+            <button type="submit" className="w-full bg-black text-white p-3 rounded-lg font-semibold shadow hover:bg-gray-800 transition">Entrar</button>
           </form>
         </div>
       </div>
@@ -654,47 +708,52 @@ function Admin() {
   }
 
   return (
-    <div className="admin-container">
-      <h1>Imobiliária AI - Painel Administrativo</h1>
-      <p className="subtitle">Ingestão de Dados e Time Machine</p>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <button onClick={handleLogout} className="logout-btn">Sair</button>
-        <LanguageToggle />
+    <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col items-center w-full text-gray-900">
+      <div className="w-full max-w-4xl flex justify-between items-start mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Imobiliária AI - Painel Administrativo</h1>
+          <p className="text-gray-500 font-medium">Ingestão de Dados e Time Machine</p>
+        </div>
+        <div className="flex gap-4 items-center">
+          <LanguageToggle />
+          <button onClick={handleLogout} className="px-4 py-2 border border-red-200 text-red-600 rounded-md hover:bg-red-50 transition-colors">Sair</button>
+        </div>
       </div>
 
-      <div className="tabs">
+      <div className="flex space-x-2 border-b border-gray-200 mb-8 w-full max-w-4xl">
         <button
-          className={`tab-btn ${activeTab === 'upload' ? 'active' : ''}`}
+          className={`px-4 py-2 font-medium border-b-2 hover:bg-gray-50 focus:outline-none transition-colors ${activeTab === 'upload' ? 'border-black text-black' : 'border-transparent text-gray-500'}`}
           onClick={() => setActiveTab('upload')}
         >
-          Upload B2B PDF
+          1. Ingestão de PDFs
         </button>
         <button
-          className={`tab-btn ${activeTab === 'catalogo-mapa' ? 'active' : ''}`}
+          className={`px-4 py-2 font-medium border-b-2 hover:bg-gray-50 focus:outline-none transition-colors ${activeTab === 'catalogo-mapa' ? 'border-black text-black' : 'border-transparent text-gray-500'}`}
           onClick={() => setActiveTab('catalogo-mapa')}
         >
-          Catálogo & Mapa
+          2. Catálogo de Projetos
         </button>
         <button
-          className={`tab-btn ${activeTab === 'staging' ? 'active' : ''}`}
+          className={`px-4 py-2 font-medium border-b-2 hover:bg-gray-50 focus:outline-none transition-colors ${activeTab === 'staging' ? 'border-black text-black' : 'border-transparent text-gray-500'}`}
           onClick={() => setActiveTab('staging')}
         >
-          Staging (Revisão)
+          3. Staging (Revisão)
         </button>
       </div>
 
       {activeTab === 'upload' && (
-        <>
-          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
+        <div className="w-full max-w-4xl flex flex-col gap-6">
+          <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500 text-gray-700 text-sm">
             Upload B2B PDF: Faça upload de Tabelas de Preço ou Books B2B para ingestão automatizada na base de dados.
           </div>
-          <div className="card" style={{ marginBottom: '2rem' }}>
+
+          <div className="bg-white rounded-xl shadow border border-gray-200 w-full p-6">
             <PDFUploader />
           </div>
 
-          <div className="card">
-            <h2>Pipeline Monitor</h2>
-            <p>Acompanhe o status de extração de dados dos documentos PDF enviados.</p>
+          <div className="bg-white rounded-xl shadow border border-gray-200 w-full p-6">
+            <h2 className="text-xl font-bold mb-2">Pipeline Monitor</h2>
+            <p className="text-gray-500 mb-4">Acompanhe o status de extração de dados dos documentos PDF enviados.</p>
             {pdfJobs.length === 0 ? (
               <p style={{ color: '#666', fontStyle: 'italic' }}>Nenhum upload registrado.</p>
             ) : (
@@ -784,12 +843,12 @@ function Admin() {
               </table>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {activeTab === 'catalogo-mapa' && (
-        <div className="catalog-container">
-          <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #007bff', marginBottom: '1.5rem', color: '#555', fontSize: '0.95rem' }}>
+        <div className="w-full max-w-7xl flex flex-col gap-6">
+          <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500 text-gray-700 text-sm">
             Catálogo & Mapa: "Visualize e analise todos os imóveis verificados e processados."
           </div>
           {renderFilterBar()}
@@ -815,16 +874,16 @@ function Admin() {
 
 
       {activeTab === 'staging' && (
-        <div className="staging-container" style={{ padding: '1rem' }}>
-           <div style={{ backgroundColor: '#fff3cd', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #ffc107', marginBottom: '1.5rem', color: '#856404', fontSize: '0.95rem' }}>
+        <div className="w-full max-w-7xl flex flex-col gap-6">
+           <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500 text-yellow-800 text-sm">
             Staging (Revisão): Imóveis que não tiveram correspondência exata e precisam de aprovação manual.
           </div>
           {projects.filter(p => p.resolution_state === 'staged').length === 0 ? (
-            <p>Nenhum projeto em staging no momento.</p>
+            <p className="text-gray-600">Nenhum projeto em staging no momento.</p>
           ) : (
             <div className="property-grid">
               {projects.filter(p => p.resolution_state === 'staged').map(project => (
-                <div key={project.id} className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                <div key={project.id} className="bg-white rounded-xl shadow border border-gray-200 p-6">
                   <h3>{project.name}</h3>
                   <p><strong>Desenvolvedor:</strong> {project.developer || 'N/A'}</p>
                   <p><strong>Bairro:</strong> {project.location?.neighborhood || 'N/A'}</p>
@@ -853,8 +912,8 @@ function Admin() {
       )}
 
       {activeTab === 'catalogo-mapa' && (
-        <div className="card" style={{ padding: '1rem', width: '100%' }}>
-          <h2>Mapa de Imóveis</h2>
+        <div className="bg-white rounded-xl shadow border border-gray-200 p-6 w-full mt-6">
+          <h2 className="text-xl font-bold mb-4">Mapa de Imóveis</h2>
           <div style={{ height: '400px', width: '100%', marginBottom: '2rem', zIndex: 0 }}>
             <MapContainer center={[-7.115, -34.863]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }}>
               <TileLayer
@@ -882,7 +941,7 @@ function Admin() {
             </MapContainer>
           </div>
 
-          <h2>Analytics: Preço por m² (Média)</h2>
+          <h2 className="text-xl font-bold mb-4 mt-8">Analytics: Preço por m² (Média)</h2>
           <div style={{ height: '300px', width: '100%' }}>
             {(() => {
               const stats = {
