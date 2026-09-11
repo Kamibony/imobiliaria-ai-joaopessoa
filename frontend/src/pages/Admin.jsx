@@ -392,7 +392,10 @@ const ProjectCard = ({ project, onSelectProject }) => {
 const LanguageToggle = () => {
   const { language, toggleLanguage } = useLanguage();
   return (
-    <button onClick={toggleLanguage} style={{ padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', background: '#e0e0e0', border: '1px solid #ccc' }}>
+    <button
+      onClick={toggleLanguage}
+      className="px-4 py-2 rounded-md font-medium bg-gray-100 text-gray-800 border border-gray-300 hover:bg-gray-200 transition-colors"
+    >
       🌐 {language === 'pt-BR' ? 'Português (BR)' : 'English'}
     </button>
   );
@@ -720,21 +723,21 @@ function Admin() {
         </div>
       </div>
 
-      <div className="flex space-x-2 border-b border-gray-200 mb-8 w-full max-w-4xl">
+      <div className="flex space-x-2 border-b-2 border-gray-900 mb-8 w-full max-w-4xl">
         <button
-          className={`px-4 py-2 font-medium border-b-2 hover:bg-gray-50 focus:outline-none transition-colors ${activeTab === 'upload' ? 'border-black text-black' : 'border-transparent text-gray-500'}`}
+          className={`px-4 py-2 font-medium rounded-t-lg focus:outline-none transition-colors border-t border-l border-r ${activeTab === 'upload' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
           onClick={() => setActiveTab('upload')}
         >
           1. Ingestão de PDFs
         </button>
         <button
-          className={`px-4 py-2 font-medium border-b-2 hover:bg-gray-50 focus:outline-none transition-colors ${activeTab === 'catalogo-mapa' ? 'border-black text-black' : 'border-transparent text-gray-500'}`}
+          className={`px-4 py-2 font-medium rounded-t-lg focus:outline-none transition-colors border-t border-l border-r ${activeTab === 'catalogo-mapa' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
           onClick={() => setActiveTab('catalogo-mapa')}
         >
           2. Catálogo de Projetos
         </button>
         <button
-          className={`px-4 py-2 font-medium border-b-2 hover:bg-gray-50 focus:outline-none transition-colors ${activeTab === 'staging' ? 'border-black text-black' : 'border-transparent text-gray-500'}`}
+          className={`px-4 py-2 font-medium rounded-t-lg focus:outline-none transition-colors border-t border-l border-r ${activeTab === 'staging' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
           onClick={() => setActiveTab('staging')}
         >
           3. Staging (Revisão)
