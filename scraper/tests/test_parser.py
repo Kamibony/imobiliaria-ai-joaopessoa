@@ -4,6 +4,12 @@ from pydantic import ValidationError
 from schemas import Lancamento, Bairro
 from parser import parse_html_to_lancamento
 
+
+@pytest.fixture(autouse=True)
+def mock_google_auth(mocker):
+    """Mock google.auth.default to prevent DefaultCredentialsError when genai.Client initializes."""
+    mocker.patch('google.auth.default', return_value=(mocker.MagicMock(), 'dummy-project'))
+
 MOCK_HTML_VALID = """
 <div class="project-card">
     <h1 class="title">Residencial Brisa do Mar</h1>
