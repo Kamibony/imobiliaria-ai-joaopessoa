@@ -14,7 +14,7 @@ from google.genai.errors import APIError
     stop=stop_after_attempt(5),
     retry=retry_if_exception_type(APIError), # Retry only on API errors (like 429/503)
 )
-def parse_html_to_lancamento(html_content: str) -> ProjectSchema:
+def parse_html_to_project(html_content: str) -> ProjectSchema:
     """Parses HTML content using Gemini to extract real estate data according to the ProjectSchema schema."""
 
     if not html_content or html_content.strip() == "":
