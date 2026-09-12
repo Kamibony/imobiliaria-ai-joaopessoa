@@ -25,6 +25,21 @@ def parse_html_to_project(html_content: str) -> ProjectSchema:
     Map the data to the provided schema.
     If an image URL is not found, leave it as null.
 
+    CRITICAL RULES FOR AI CONTEXT GENERATION (João Pessoa Market):
+    You MUST dynamically generate the `ai_context` field (specifically `target_persona` and `local_advantage` in 'pt-BR' and 'en') based on the following strict rules:
+
+    1. If Neighborhood is Tambaú or Cabo Branco AND area is small (<50m2):
+       - Target Persona: ["Investors", "Digital Nomads"]
+       - Local advantage: Highlight short-term rental liquidity, Airbnb potential, and proximity to the tourist hub.
+
+    2. If Neighborhood is Manaíra or Bessa AND area is 90m2 - 150m2:
+       - Target Persona: ["Families"]
+       - Local advantage: Highlight the "Missing Middle" solution, stability, and family-oriented amenities (Condomínio clube).
+
+    3. If Neighborhood is Altiplano OR area is very large/luxury:
+       - Target Persona: ["UHNWI", "Investors"]
+       - Local advantage: Highlight extreme exclusivity, vertical living or biofilia, and branded architecture.
+
     HTML Content:
     {html_content}
     """

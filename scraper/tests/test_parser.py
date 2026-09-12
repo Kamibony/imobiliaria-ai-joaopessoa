@@ -47,7 +47,7 @@ def test_parse_valid_html(mocker):
     assert result.status == "em_construcao"
     assert str(result.manual_hero_image_url).rstrip("/") == "https://example.com/brisa.jpg"
     assert result.resolution_state == "staged"
-    assert result.ai_context == {"target_persona": {"pt-BR": [], "en": []}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": "", "en": ""}}
+    assert result.ai_context.model_dump(by_alias=True) == {"target_persona": {"pt-BR": [], "en": []}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": "", "en": ""}}
 
 
 def test_parse_html_missing_image(mocker):
@@ -64,7 +64,7 @@ def test_parse_html_missing_image(mocker):
     assert result.status == "na_planta"
     assert result.manual_hero_image_url is None
     assert result.resolution_state == "staged"
-    assert result.ai_context == {"target_persona": {"pt-BR": [], "en": []}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": "", "en": ""}}
+    assert result.ai_context.model_dump(by_alias=True) == {"target_persona": {"pt-BR": [], "en": []}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": "", "en": ""}}
 
 
 def test_parse_empty_html():
