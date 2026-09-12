@@ -7,7 +7,7 @@ from pydantic import ValidationError
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-TARGET_URL = "https://example.com/lancamentos-joao-pessoa"  # Placeholder URL
+TARGET_URL = "https://TARGET_DOMAIN_PLACEHOLDER"  # Placeholder URL
 
 def main():
     logger.info(f"Starting crawler for {TARGET_URL}")
@@ -18,6 +18,25 @@ def main():
         try:
             logger.info("Navigating to page...")
             page.goto(TARGET_URL, wait_until="networkidle")
+
+            # Programmatic auto-scroll to the absolute bottom of the page
+            logger.info("Scrolling to the bottom of the page...")
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
+            # Brief explicit wait after scrolling
+            logger.info("Waiting for front-end state updates and animations...")
+            page.wait_for_timeout(3000)
+
+            # Payload Optimization: strip out unnecessary tags
+            logger.info("Stripping out unnecessary tags (<script>, <style>, <svg>, <iframe>)...")
+            page.evaluate("""
+                const tagsToRemove = ['script', 'style', 'svg', 'iframe'];
+                tagsToRemove.forEach(tag => {
+                    const elements = document.querySelectorAll(tag);
+                    elements.forEach(el => el.remove());
+                });
+            """)
+
             html_content = page.content()
             logger.info("Successfully extracted HTML content.")
 
