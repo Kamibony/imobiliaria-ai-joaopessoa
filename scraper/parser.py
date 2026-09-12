@@ -7,10 +7,12 @@ from schemas import Lancamento
 class EmptyHTMLError(Exception):
     pass
 
+from google.genai.errors import APIError
+
 @retry(
     wait=wait_exponential(multiplier=1, min=4, max=10),
     stop=stop_after_attempt(5),
-    retry=retry_if_exception_type(Exception), # Retry on any exception, including network or 429
+    retry=retry_if_exception_type(APIError), # Retry only on API errors (like 429/503)
 )
 def parse_html_to_lancamento(html_content: str) -> Lancamento:
     """Parses HTML content using Gemini to extract real estate data according to the Lancamento schema."""
@@ -27,7 +29,7 @@ def parse_html_to_lancamento(html_content: str) -> Lancamento:
     {html_content}
     """
 
-    client = genai.Client()
+    client = genai.Client(vertexai=True)
     response = client.models.generate_content(
         model='gemini-2.5-flash',
         contents=prompt,
