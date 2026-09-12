@@ -6,6 +6,9 @@ on:
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
     defaults:
       run:
         working-directory: ./scraper
@@ -28,10 +31,12 @@ jobs:
       - name: Install Playwright Browsers
         run: uv run playwright install chromium --with-deps
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - id: 'auth'
+        name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v2'
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: '${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ secrets.GCP_SERVICE_ACCOUNT }}'
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
