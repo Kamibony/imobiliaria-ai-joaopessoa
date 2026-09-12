@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from schemas import ProjectSchema, Bairro, Status
-from parser import parse_html_to_lancamento
+from schemas import ProjectSchema
+from parser import parse_html_to_project
 
 
 @pytest.fixture(autouse=True)
@@ -39,13 +39,15 @@ def test_parse_valid_html(mocker):
     mock_response.text = '{"name": "Residencial Brisa do Mar", "developer": "Construtora Alliance", "location": {"neighborhood": "Cabo Branco"}, "status": "em_construcao", "manual_hero_image_url": "https://example.com/brisa.jpg"}'
     mocker.patch('google.genai.models.Models.generate_content', return_value=mock_response)
 
-    result = parse_html_to_lancamento(MOCK_HTML_VALID)
+    result = parse_html_to_project(MOCK_HTML_VALID)
     assert isinstance(result, ProjectSchema)
     assert result.name == "Residencial Brisa do Mar"
     assert result.developer == "Construtora Alliance"
-    assert result.location.neighborhood == Bairro.CABO_BRANCO
-    assert result.status == Status.EM_CONSTRUCAO
+    assert result.location["neighborhood"] == "Cabo Branco"
+    assert result.status == "em_construcao"
     assert str(result.manual_hero_image_url).rstrip("/") == "https://example.com/brisa.jpg"
+    assert result.resolution_state == "staged"
+    assert result.ai_context == {"target_persona": {"pt-BR": [], "en": []}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": "", "en": ""}}
 
 
 def test_parse_html_missing_image(mocker):
@@ -54,13 +56,15 @@ def test_parse_html_missing_image(mocker):
     mock_response.text = '{"name": "Edifício Solar das Águas", "developer": "Setai Construtora", "location": {"neighborhood": "Tambaú"}, "status": "na_planta", "manual_hero_image_url": null}'
     mocker.patch('google.genai.models.Models.generate_content', return_value=mock_response)
 
-    result = parse_html_to_lancamento(MOCK_HTML_MISSING_IMAGE)
+    result = parse_html_to_project(MOCK_HTML_MISSING_IMAGE)
     assert isinstance(result, ProjectSchema)
     assert result.name == "Edifício Solar das Águas"
     assert result.developer == "Setai Construtora"
-    assert result.location.neighborhood == Bairro.TAMBAU
-    assert result.status == Status.NA_PLANTA
+    assert result.location["neighborhood"] == "Tambaú"
+    assert result.status == "na_planta"
     assert result.manual_hero_image_url is None
+    assert result.resolution_state == "staged"
+    assert result.ai_context == {"target_persona": {"pt-BR": [], "en": []}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": "", "en": ""}}
 
 
 def test_parse_empty_html():
@@ -69,4 +73,4 @@ def test_parse_empty_html():
     from parser import EmptyHTMLError
     from tenacity import RetryError
     with pytest.raises((EmptyHTMLError, RetryError)):
-        parse_html_to_lancamento(MOCK_HTML_EMPTY)
+        parse_html_to_project(MOCK_HTML_EMPTY)

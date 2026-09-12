@@ -6,7 +6,7 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 from playwright.sync_api import sync_playwright
-from parser import parse_html_to_lancamento
+from parser import parse_html_to_project
 from pydantic import ValidationError
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -73,26 +73,26 @@ def main():
 
     try:
         # In a real scenario with multiple projects on a page, the prompt/schema
-        # would likely be a list of Lancamentos. Here we parse what we assume
+        # would likely be a list of Projects. Here we parse what we assume
         # is a single project or the AI parses the first one it finds matching the schema.
-        result = parse_html_to_lancamento(html_content)
+        result = parse_html_to_project(html_content)
 
         logger.info("\n--- Extracted Real Estate Project ---")
         print(result.model_dump_json(indent=2))
         logger.info("-------------------------------------")
 
-        # Ensure routing to Staging
-        result.resolution_state = 'staged'
-        result.has_units = False
-
-        # Upsert into Firestore
-        slug = generate_slug(result.name)
-        result.id = slug
-        doc_ref = db.collection('projects').document(slug)
-
         # Convert HttpUrl to string for Firestore compatibility if needed,
         # model_dump handles it based on mode, mode='json' converts to simple types
         data_to_save = result.model_dump(mode='json', exclude_none=False, by_alias=True)
+
+        # Ensure routing to Staging
+        data_to_save['resolution_state'] = 'staged'
+        data_to_save['has_units'] = False
+
+        # Upsert into Firestore
+        slug = generate_slug(result.name)
+        data_to_save['id'] = slug
+        doc_ref = db.collection('projects').document(slug)
 
         logger.info(f"Saving to Firestore: collection 'projects', document '{slug}'...")
         doc_ref.set(data_to_save, merge=True)
