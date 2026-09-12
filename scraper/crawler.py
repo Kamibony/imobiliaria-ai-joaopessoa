@@ -7,7 +7,7 @@ from pydantic import ValidationError
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-TARGET_URL = "https://TARGET_DOMAIN_PLACEHOLDER"  # Placeholder URL
+TARGET_URL = "https://somosghc.com/lpvivence/"
 
 def main():
     logger.info(f"Starting crawler for {TARGET_URL}")
