@@ -1,5 +1,10 @@
 import logging
 import sys
+import re
+import unicodedata
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
 from playwright.sync_api import sync_playwright
 from parser import parse_html_to_lancamento
 from pydantic import ValidationError
@@ -7,9 +12,26 @@ from pydantic import ValidationError
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-TARGET_URL = "https://TARGET_DOMAIN_PLACEHOLDER"  # Placeholder URL
+TARGET_URL = "https://somosghc.com/lpvivence/"
+
+def generate_slug(text: str) -> str:
+    """Generate a URL-friendly slug from a string."""
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+    text = re.sub(r'[-\s]+', '-', text)
+    return text
 
 def main():
+    logger.info("Initializing Firebase Admin SDK...")
+    try:
+        # Initialize Firebase Admin using Application Default Credentials (ADC)
+        firebase_admin.initialize_app()
+        db = firestore.client()
+        logger.info("Firebase initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize Firebase: {e}")
+        sys.exit(1)
+
     logger.info(f"Starting crawler for {TARGET_URL}")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -58,6 +80,18 @@ def main():
         logger.info("\n--- Extracted Real Estate Project ---")
         print(result.model_dump_json(indent=2))
         logger.info("-------------------------------------")
+
+        # Upsert into Firestore
+        slug = generate_slug(result.nome)
+        doc_ref = db.collection('lancamentos').document(slug)
+
+        # Convert HttpUrl to string for Firestore compatibility if needed,
+        # model_dump handles it based on mode, mode='json' converts to simple types
+        data_to_save = result.model_dump(mode='json')
+
+        logger.info(f"Saving to Firestore: collection 'lancamentos', document '{slug}'...")
+        doc_ref.set(data_to_save, merge=True)
+        logger.info("Successfully saved data to Firestore.")
 
     except ValidationError as ve:
         logger.error(f"Pydantic Validation Error during parsing: {ve}")
