@@ -29,7 +29,7 @@ def parse_html_to_lancamento(html_content: str) -> Lancamento:
     {html_content}
     """
 
-    client = genai.Client()
+    client = genai.Client(vertexai=True)
     response = client.models.generate_content(
         model='gemini-2.5-flash',
         contents=prompt,
