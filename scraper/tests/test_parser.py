@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from schemas import Lancamento, Bairro
+from schemas import ProjectSchema, Bairro, Status
 from parser import parse_html_to_lancamento
 
 
@@ -36,31 +36,31 @@ MOCK_HTML_EMPTY = ""
 def test_parse_valid_html(mocker):
     """Test parsing a valid HTML snippet containing all fields."""
     mock_response = mocker.MagicMock()
-    mock_response.text = '{"nome": "Residencial Brisa do Mar", "construtora": "Construtora Alliance", "bairro": "Cabo Branco", "fase_obra": "Em construção", "hero_image_url": "https://example.com/brisa.jpg"}'
+    mock_response.text = '{"name": "Residencial Brisa do Mar", "developer": "Construtora Alliance", "location": {"neighborhood": "Cabo Branco"}, "status": "em_construcao", "manual_hero_image_url": "https://example.com/brisa.jpg"}'
     mocker.patch('google.genai.models.Models.generate_content', return_value=mock_response)
 
     result = parse_html_to_lancamento(MOCK_HTML_VALID)
-    assert isinstance(result, Lancamento)
-    assert result.nome == "Residencial Brisa do Mar"
-    assert result.construtora == "Construtora Alliance"
-    assert result.bairro == Bairro.CABO_BRANCO
-    assert result.fase_obra == "Em construção"
-    assert str(result.hero_image_url).rstrip("/") == "https://example.com/brisa.jpg"
+    assert isinstance(result, ProjectSchema)
+    assert result.name == "Residencial Brisa do Mar"
+    assert result.developer == "Construtora Alliance"
+    assert result.location.neighborhood == Bairro.CABO_BRANCO
+    assert result.status == Status.EM_CONSTRUCAO
+    assert str(result.manual_hero_image_url).rstrip("/") == "https://example.com/brisa.jpg"
 
 
 def test_parse_html_missing_image(mocker):
     """Test parsing HTML where the hero image URL is missing."""
     mock_response = mocker.MagicMock()
-    mock_response.text = '{"nome": "Edifício Solar das Águas", "construtora": "Setai Construtora", "bairro": "Tambaú", "fase_obra": "Lançamento", "hero_image_url": null}'
+    mock_response.text = '{"name": "Edifício Solar das Águas", "developer": "Setai Construtora", "location": {"neighborhood": "Tambaú"}, "status": "na_planta", "manual_hero_image_url": null}'
     mocker.patch('google.genai.models.Models.generate_content', return_value=mock_response)
 
     result = parse_html_to_lancamento(MOCK_HTML_MISSING_IMAGE)
-    assert isinstance(result, Lancamento)
-    assert result.nome == "Edifício Solar das Águas"
-    assert result.construtora == "Setai Construtora"
-    assert result.bairro == Bairro.TAMBAU
-    assert result.fase_obra == "Lançamento"
-    assert result.hero_image_url is None
+    assert isinstance(result, ProjectSchema)
+    assert result.name == "Edifício Solar das Águas"
+    assert result.developer == "Setai Construtora"
+    assert result.location.neighborhood == Bairro.TAMBAU
+    assert result.status == Status.NA_PLANTA
+    assert result.manual_hero_image_url is None
 
 
 def test_parse_empty_html():

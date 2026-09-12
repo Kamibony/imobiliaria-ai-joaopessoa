@@ -2,7 +2,7 @@ import os
 from google import genai
 from google.genai import types
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
-from schemas import Lancamento
+from schemas import ProjectSchema
 
 class EmptyHTMLError(Exception):
     pass
@@ -14,8 +14,8 @@ from google.genai.errors import APIError
     stop=stop_after_attempt(5),
     retry=retry_if_exception_type(APIError), # Retry only on API errors (like 429/503)
 )
-def parse_html_to_lancamento(html_content: str) -> Lancamento:
-    """Parses HTML content using Gemini to extract real estate data according to the Lancamento schema."""
+def parse_html_to_lancamento(html_content: str) -> ProjectSchema:
+    """Parses HTML content using Gemini to extract real estate data according to the ProjectSchema schema."""
 
     if not html_content or html_content.strip() == "":
         raise EmptyHTMLError("HTML content cannot be empty.")
@@ -35,7 +35,7 @@ def parse_html_to_lancamento(html_content: str) -> Lancamento:
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=Lancamento,
+            response_schema=ProjectSchema,
         ),
     )
 
@@ -45,4 +45,4 @@ def parse_html_to_lancamento(html_content: str) -> Lancamento:
     # Pydantic will validate the JSON string returned by Gemini.
     # The new google-genai library with structured output returns JSON string.
     # We can parse it directly with Pydantic.
-    return Lancamento.model_validate_json(response.text)
+    return ProjectSchema.model_validate_json(response.text)

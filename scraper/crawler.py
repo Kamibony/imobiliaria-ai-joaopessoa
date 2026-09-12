@@ -81,15 +81,20 @@ def main():
         print(result.model_dump_json(indent=2))
         logger.info("-------------------------------------")
 
+        # Ensure routing to Staging
+        result.resolution_state = 'staged'
+        result.has_units = False
+
         # Upsert into Firestore
-        slug = generate_slug(result.nome)
-        doc_ref = db.collection('lancamentos').document(slug)
+        slug = generate_slug(result.name)
+        result.id = slug
+        doc_ref = db.collection('projects').document(slug)
 
         # Convert HttpUrl to string for Firestore compatibility if needed,
         # model_dump handles it based on mode, mode='json' converts to simple types
-        data_to_save = result.model_dump(mode='json')
+        data_to_save = result.model_dump(mode='json', exclude_none=False, by_alias=True)
 
-        logger.info(f"Saving to Firestore: collection 'lancamentos', document '{slug}'...")
+        logger.info(f"Saving to Firestore: collection 'projects', document '{slug}'...")
         doc_ref.set(data_to_save, merge=True)
         logger.info("Successfully saved data to Firestore.")
 
