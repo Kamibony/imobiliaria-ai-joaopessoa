@@ -22,5 +22,27 @@ class ProjectSchema(BaseModel):
             "investment_roi_estimated_percent": None,
             "local_advantage": {"pt-BR": "", "en": ""}
         },
-        description="Contexto de AI do projeto"
+        description="Contexto de AI do projeto",
+        json_schema_extra={
+            "properties": {
+                "target_persona": {
+                    "type": "object",
+                    "properties": {
+                        "pt-BR": {"type": "array", "items": {"type": "string"}},
+                        "en": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": ["pt-BR", "en"]
+                },
+                "investment_roi_estimated_percent": {"type": ["number", "null"]},
+                "local_advantage": {
+                    "type": "object",
+                    "properties": {
+                        "pt-BR": {"type": "string"},
+                        "en": {"type": "string"}
+                    },
+                    "required": ["pt-BR", "en"]
+                }
+            },
+            "required": ["target_persona", "local_advantage"]
+        }
     )
