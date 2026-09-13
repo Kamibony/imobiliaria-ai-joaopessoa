@@ -1,5 +1,18 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
+
+class BilingualPersona(BaseModel):
+    pt_BR: List[str] = Field(default_factory=list, alias="pt-BR")
+    en: List[str] = Field(default_factory=list)
+
+class BilingualAdvantage(BaseModel):
+    pt_BR: str = Field(default="", alias="pt-BR")
+    en: str = Field(default="")
+
+class AiContextSchema(BaseModel):
+    target_persona: BilingualPersona = Field(default_factory=BilingualPersona)
+    investment_roi_estimated_percent: Optional[float] = Field(default=None)
+    local_advantage: BilingualAdvantage = Field(default_factory=BilingualAdvantage)
 
 class ProjectSchema(BaseModel):
     name: str = Field(description="Nome do empreendimento imobiliário")
@@ -16,33 +29,4 @@ class ProjectSchema(BaseModel):
     )
     manual_hero_image_url: Optional[str] = Field(default=None, description="URL da imagem principal do empreendimento")
     resolution_state: str = Field(default="staged", description="Estado de resolução do projeto")
-    ai_context: Dict[str, Any] = Field(
-        default={
-            "target_persona": {"pt-BR": [], "en": []},
-            "investment_roi_estimated_percent": None,
-            "local_advantage": {"pt-BR": "", "en": ""}
-        },
-        description="Contexto de AI do projeto",
-        json_schema_extra={
-            "properties": {
-                "target_persona": {
-                    "type": "object",
-                    "properties": {
-                        "pt-BR": {"type": "array", "items": {"type": "string"}},
-                        "en": {"type": "array", "items": {"type": "string"}}
-                    },
-                    "required": ["pt-BR", "en"]
-                },
-                "investment_roi_estimated_percent": {"type": ["number", "null"]},
-                "local_advantage": {
-                    "type": "object",
-                    "properties": {
-                        "pt-BR": {"type": "string"},
-                        "en": {"type": "string"}
-                    },
-                    "required": ["pt-BR", "en"]
-                }
-            },
-            "required": ["target_persona", "local_advantage"]
-        }
-    )
+    ai_context: AiContextSchema = Field(default_factory=AiContextSchema, description="Contexto de AI do projeto")
