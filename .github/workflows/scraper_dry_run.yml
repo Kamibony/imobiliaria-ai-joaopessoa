@@ -42,4 +42,4 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Execute Crawler
-        run: uv run crawler.py
+        run: uv run main.py
