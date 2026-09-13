@@ -12,6 +12,7 @@ const ProjectCard = ({ project }) => {
 
   useEffect(() => {
     if (project?.manual_hero_image_url) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHeroImageUrl(project.manual_hero_image_url);
     } else if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
       const fetchHeroImage = async () => {
@@ -35,14 +36,13 @@ const ProjectCard = ({ project }) => {
       className="public-project-card"
       style={{
         cursor: 'pointer',
-        minWidth: '320px',
         backgroundColor: 'var(--color-surface)',
-        border: '1px solid #e5e7eb',
         borderRadius: '4px',
         overflow: 'hidden',
         transition: 'all 0.3s ease',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        height: '100%'
       }}
       onClick={() => navigate(`/projetos/${project.id}`)}
       onMouseEnter={(e) => {
@@ -90,18 +90,13 @@ const ProjectCard = ({ project }) => {
         </div>
       </div>
 
-      <div style={{ padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <h3 className="card-title" style={{ margin: '0 0 0.5rem 0', color: 'var(--color-black)', fontSize: '1.25rem', transition: 'color 0.3s ease' }}>
+      <div style={{ padding: '1rem 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <h3 className="card-title" style={{ margin: '0 0 0.25rem 0', color: 'var(--color-black)', fontSize: '1.25rem', transition: 'color 0.3s ease', fontWeight: '600' }}>
           {project.name || 'Sem Título'}
         </h3>
-        <p style={{ margin: '0 0 1rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-          Por {project.developer || 'Construtora não informada'}
+        <p style={{ margin: '0 0 1rem 0', color: 'var(--color-text-muted)', fontSize: '0.95rem' }}>
+          {project.developer || 'Construtora não informada'}
         </p>
-
-        <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--color-black)' }}>Explorar Projeto</span>
-          <span style={{ color: 'var(--color-accent-gold)' }}>&rarr;</span>
-        </div>
       </div>
     </div>
   );
@@ -139,6 +134,7 @@ const PublicHome = () => {
 
   useEffect(() => {
     if (featuredProject?.manual_hero_image_url) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFeaturedImageUrl(featuredProject.manual_hero_image_url);
     } else if (featuredProject?.assets?.hero_images && featuredProject.assets.hero_images.length > 0) {
       const fetchHeroImage = async () => {
@@ -265,34 +261,18 @@ const PublicHome = () => {
           ))}
         </div>
 
-        {/* Curated Rows */}
-        <div style={{ marginBottom: '5rem' }}>
-          <h2 style={{ marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Destaques do Mês</h2>
-          <div style={{ display: 'flex', overflowX: 'auto', gap: '2rem', paddingBottom: '2rem', paddingLeft: '0.5rem', paddingRight: '0.5rem', scrollSnapType: 'x mandatory' }}>
-            {filteredProjects.slice(0, 5).map(project => (
-              <div key={project.id} style={{ scrollSnapAlign: 'start' }}>
-                <ProjectCard project={project} />
-              </div>
-            ))}
-            {filteredProjects.length === 0 && (
-              <p style={{ color: 'var(--color-text-muted)' }}>Nenhum projeto encontrado para esta região.</p>
-            )}
-          </div>
+        {/* Unified Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredProjects.map(project => (
+            <ProjectCard key={project.id} project={project} />
+          ))}
         </div>
 
-        <div>
-          <h2 style={{ marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem' }}>Oportunidades para Investidores</h2>
-          <div style={{ display: 'flex', overflowX: 'auto', gap: '2rem', paddingBottom: '2rem', paddingLeft: '0.5rem', paddingRight: '0.5rem', scrollSnapType: 'x mandatory' }}>
-            {filteredProjects.slice(5, 10).map(project => (
-              <div key={project.id} style={{ scrollSnapAlign: 'start' }}>
-                <ProjectCard project={project} />
-              </div>
-            ))}
-            {filteredProjects.length <= 5 && (
-              <p style={{ color: 'var(--color-text-muted)' }}>Explore nossos destaques acima para encontrar as melhores oportunidades.</p>
-            )}
+        {filteredProjects.length === 0 && (
+          <div style={{ padding: '4rem 0', textAlign: 'center' }}>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem' }}>Nenhum projeto encontrado para esta região.</p>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
