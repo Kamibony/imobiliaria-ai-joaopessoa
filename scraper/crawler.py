@@ -1,26 +1,11 @@
 import logging
-import sys
 import re
 import unicodedata
 import asyncio
-import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import firestore
-from playwright.async_api import async_playwright
 from parser import parse_html_to_project
 from pydantic import ValidationError
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
-
-TARGET_URLS = [
-    "https://construtoraatlantis.com.br/empreendimento/atlantis-ocean-cabo-branco/",
-    "https://www.teixeiradecarvalho.com.br/lancamentos/Atmosphera-Cabo-Branco-3641",
-    "https://apto.vc/br/pb/joao-pessoa/tambau/get-a-way",
-    "https://apto.vc/br/pb/joao-pessoa/tambau/millennial",
-    "https://lancamento.invexo.com.br/pb/sky-altiplano-residence/",
-    "https://apto.vc/br/pb/joao-pessoa/altiplano-cabo-branco/arte-urban-design"
-]
 
 def generate_slug(text: str) -> str:
     """Generate a URL-friendly slug from a string."""
@@ -93,29 +78,3 @@ async def fetch_url(url: str, browser, db, semaphore: asyncio.Semaphore):
 
         except Exception as e:
             logger.error(f"Failed to fetch or process {url}: {e}")
-
-async def async_main():
-    logger.info("Initializing Firebase Admin SDK...")
-    try:
-        # Initialize Firebase Admin using Application Default Credentials (ADC)
-        firebase_admin.initialize_app()
-        db = firestore.client()
-        logger.info("Firebase initialized successfully.")
-    except Exception as e:
-        logger.error(f"Failed to initialize Firebase: {e}")
-        sys.exit(1)
-
-    logger.info("Starting crawler for multiple URLs")
-    semaphore = asyncio.Semaphore(5)
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        tasks = [fetch_url(url, browser, db, semaphore) for url in TARGET_URLS]
-        await asyncio.gather(*tasks)
-        await browser.close()
-
-def main():
-    asyncio.run(async_main())
-
-if __name__ == "__main__":
-    main()
