@@ -5,6 +5,7 @@ from playwright.async_api import Browser
 from crawler import generate_slug
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 SEED_URLS = [
     "https://mgaconstrucoes.com.br/todos-empreendimentos/",
@@ -16,11 +17,15 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
     parsed_url = urlparse(url)
     parsed_seed = urlparse(seed_url)
 
-    if parsed_url.netloc != parsed_seed.netloc:
+    url_netloc = parsed_url.netloc.removeprefix('www.')
+    seed_netloc = parsed_seed.netloc.removeprefix('www.')
+    if url_netloc != seed_netloc:
+        logger.debug(f"Discarding {url}: netloc mismatch ({url_netloc} != {seed_netloc})")
         return False
 
     path = parsed_url.path.strip('/')
     if not path:
+        logger.debug(f"Discarding {url}: missing path")
         return False
 
     parts = path.split('/')
@@ -34,15 +39,28 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
         }
         for part in parts:
             if part in invalid_keywords:
+                logger.debug(f"Discarding {url}: found invalid keyword '{part}'")
                 return False
+        logger.debug(f"Accepting {url} for seed {seed_url}")
         return True
 
     elif 'bauten.cc' in seed_url:
-        return 'empreendimentos' in parts
+        if 'empreendimentos' in parts:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: 'empreendimentos' not in path")
+            return False
 
     elif 'somosghc.com' in seed_url:
-        return 'imovel' in parts and 'imoveis' not in parts
+        if 'imovel' in parts and 'imoveis' not in parts:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: invalid path structure for somosghc.com")
+            return False
 
+    logger.debug(f"Discarding {url}: no matching rules for seed {seed_url}")
     return False
 
 def extract_slug_from_url(url: str) -> str:
