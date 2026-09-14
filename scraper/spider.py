@@ -75,30 +75,44 @@ async def discover_urls(browser: Browser, db) -> list[str]:
 
     for seed in SEED_URLS:
         logger.info(f"Spidering seed URL: {seed}")
-        try:
-            page = await browser.new_page()
-            await page.goto(seed, wait_until="networkidle")
 
-            # Programmatic scroll and wait
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await page.wait_for_timeout(3000)
+        # Retry logic for seed URLs
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                page = await browser.new_page()
+                # Use domcontentloaded for faster loading and avoid waiting for all tracking scripts
+                await page.goto(seed, wait_until="domcontentloaded", timeout=30000)
 
-            hrefs = await page.evaluate("Array.from(document.querySelectorAll('a')).map(a => a.href)")
+                # Programmatic scroll and wait
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(3000)
 
-            for href in hrefs:
-                if not href:
-                    continue
+                hrefs = await page.evaluate("Array.from(document.querySelectorAll('a')).map(a => a.href)")
 
-                parsed_href = urlparse(href)
-                # Reconstruct clean URL without hash or query
-                clean_url = f"{parsed_href.scheme}://{parsed_href.netloc}{parsed_href.path}"
+                for href in hrefs:
+                    if not href:
+                        continue
 
-                if is_valid_property_link(clean_url, seed):
-                    discovered_urls.add(clean_url)
+                    parsed_href = urlparse(href)
+                    # Reconstruct clean URL without hash or query
+                    clean_url = f"{parsed_href.scheme}://{parsed_href.netloc}{parsed_href.path}"
 
-            await page.close()
-        except Exception as e:
-            logger.error(f"Error spidering {seed}: {e}")
+                    if is_valid_property_link(clean_url, seed):
+                        discovered_urls.add(clean_url)
+
+                await page.close()
+                break # Success, break out of retry loop
+            except Exception as e:
+                logger.warning(f"Error spidering {seed} (attempt {attempt + 1}/{max_retries}): {e}")
+                try:
+                    await page.close()
+                except:
+                    pass
+                if attempt == max_retries - 1:
+                    logger.error(f"Failed to spider seed {seed} after {max_retries} attempts.")
+                else:
+                    await asyncio.sleep(2 ** attempt) # Exponential backoff
 
     logger.info(f"Discovered {len(discovered_urls)} potential property URLs. Deduplicating...")
     new_urls = []
