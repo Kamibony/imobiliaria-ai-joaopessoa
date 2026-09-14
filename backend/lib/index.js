@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.whatsappWebhook = exports.ingestPdf = void 0;
+exports.whatsappWebhook = exports.ingestPdf = exports.askConcierge = void 0;
 const params_1 = require("firebase-functions/params");
 const https_1 = require("firebase-functions/v2/https");
 const storage_1 = require("firebase-functions/v2/storage");
@@ -83,6 +83,75 @@ async function callGeminiWithRetry(generativeModel, request, maxRetries = 3) {
     }
     throw new Error("Failed to generate content after max retries");
 }
+const https_2 = require("firebase-functions/v2/https");
+// In-memory cache for the Concierge catalog
+let catalogCache = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+exports.askConcierge = (0, https_2.onCall)({ cors: true, maxInstances: 5 }, async (request) => {
+    try {
+        const { chatHistory } = request.data;
+        if (!chatHistory || !Array.isArray(chatHistory)) {
+            throw new Error("Invalid chat history");
+        }
+        // Refresh cache if needed
+        const now = Date.now();
+        if (!catalogCache || (now - lastCacheTime > CACHE_TTL_MS)) {
+            const projectsSnapshot = await db.collection("projects").where("resolution_state", "!=", "staged").get();
+            catalogCache = projectsSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name,
+                    location: data.location,
+                    price_range: data.price_range, // May not exist on top level, but included for completeness
+                    roi_badges: data.ai_context?.investment_roi_estimated_percent ? `${data.ai_context.investment_roi_estimated_percent}%` : null,
+                    target_persona: data.ai_context?.target_persona?.["pt-BR"],
+                    local_advantage: data.ai_context?.local_advantage?.["pt-BR"],
+                    status: data.status,
+                    delivery_date: data.delivery_date
+                };
+            });
+            lastCacheTime = now;
+            console.log(`Concierge catalog cache refreshed with ${catalogCache.length} active projects.`);
+        }
+        const systemPrompt = `
+      You are the elite "O Exclusivo" Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa, etc.).
+      You must maintain a highly professional, objective, and premium tone. Do not use overly casual language.
+      Focus on ROI for digital nomads and luxury for High-Net-Worth Individuals (UHNWI).
+
+      You must ONLY recommend properties that are present in the following injected JSON catalog:
+      ${JSON.stringify(catalogCache)}
+
+      When you decide to recommend a specific property from the catalog, you MUST output a tag exactly like this:
+      [RECOMMENDATION: project-slug]
+      Replace "project-slug" with the actual 'id' of the property from the catalog.
+
+      If the user is ready to proceed or has high intent, seamlessly guide them to use the "Falar com Corretor" button.
+      Keep your responses concise and in Brazilian Portuguese.
+    `;
+        const model = getVertexAi().getGenerativeModel({
+            model: "gemini-2.5-flash",
+            systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+        });
+        const formattedHistory = chatHistory.map((msg) => ({
+            role: msg.role === 'ai' ? 'model' : 'user',
+            parts: [{ text: msg.text }]
+        }));
+        // Vertex AI strictly requires the conversation history to begin with a 'user' message.
+        // If the frontend sent an array starting with an AI greeting, we must drop it.
+        if (formattedHistory.length > 0 && formattedHistory[0].role === 'model') {
+            formattedHistory.shift();
+        }
+        const result = await callGeminiWithRetry(model, { contents: formattedHistory });
+        const aiResponseText = result.response?.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não consegui processar sua solicitação no momento.";
+        return { response: aiResponseText };
+    }
+    catch (error) {
+        console.error("Error in askConcierge:", error);
+        throw new Error(error.message || "Unknown error");
+    }
+});
 exports.ingestPdf = (0, storage_1.onObjectFinalized)({
     timeoutSeconds: 300,
 }, async (event) => {
