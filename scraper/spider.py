@@ -14,7 +14,12 @@ SEED_URLS = [
     "https://alliance.com.br/",
     "https://construtorabrascon.com.br/imoveis/",
     "https://abcconstrucoes.com.br/empreendimentos/",
-    "https://setaigrupogp.com.br/empreendimentos/"
+    "https://setaigrupogp.com.br/empreendimentos/",
+    "https://apto.vc/br/pb/joao-pessoa/",
+    "https://ocaconstrutora.com.br/empreendimentos/",
+    "https://massai.com.br/empreendimentos",
+    "https://ecoconstrucoes.com.br/imoveis/",
+    "https://www.teixeiradecarvalho.com.br/lancamentos"
 ]
 
 def is_valid_property_link(url: str, seed_url: str) -> bool:
@@ -108,6 +113,50 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
                 return False
         else:
             logger.debug(f"Discarding {url}: 'empreendimentos' not in path for setaigrupogp.com.br")
+            return False
+
+    elif 'apto.vc' in seed_url:
+        # Expected format: /br/pb/joao-pessoa/bairro/empreendimento or similar for other cities
+        # Needs to be at least 5 parts to be a specific property.
+        if len(parts) >= 5 and parts[0] == 'br' and parts[1] == 'pb' and parts[2] in ['joao-pessoa', 'cabedelo', 'conde']:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for apto.vc")
+            return False
+
+    elif 'ocaconstrutora.com.br' in seed_url:
+        if 'empreendimento' in parts and len([p for p in parts if p]) > 1:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for ocaconstrutora.com.br")
+            return False
+
+    elif 'massai.com.br' in seed_url:
+        if 'empreendimentos' in parts and len([p for p in parts if p]) > 1:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for massai.com.br")
+            return False
+
+    elif 'ecoconstrucoes.com.br' in seed_url:
+        if 'imoveis' in parts and len([p for p in parts if p]) > 1:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for ecoconstrucoes.com.br")
+            return False
+
+    elif 'teixeiradecarvalho.com.br' in seed_url:
+        property_keywords = {'imoveis', 'imovel', 'empreendimento', 'empreendimentos', 'lancamentos'}
+        # Check if any part is in the property keywords and there's another part indicating a specific property
+        if any(keyword in parts for keyword in property_keywords) and len([p for p in parts if p]) > 1:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for teixeiradecarvalho.com.br")
             return False
 
     logger.debug(f"Discarding {url}: no matching rules for seed {seed_url}")
