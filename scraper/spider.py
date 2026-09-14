@@ -10,7 +10,11 @@ logger.setLevel(logging.DEBUG)
 SEED_URLS = [
     "https://mgaconstrucoes.com.br/todos-empreendimentos/",
     "https://bauten.cc/",
-    "https://somosghc.com/imoveis/"
+    "https://somosghc.com/imoveis/",
+    "https://alliance.com.br/",
+    "https://construtorabrascon.com.br/imoveis/",
+    "https://abcconstrucoes.com.br/empreendimentos/",
+    "https://setaigrupogp.com.br/empreendimentos/"
 ]
 
 def is_valid_property_link(url: str, seed_url: str) -> bool:
@@ -58,6 +62,52 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
             return True
         else:
             logger.debug(f"Discarding {url}: invalid path structure for somosghc.com")
+            return False
+
+    elif 'alliance.com.br' in seed_url:
+        if 'imovel' in parts:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: 'imovel' not in path for alliance.com.br")
+            return False
+
+    elif 'construtorabrascon.com.br' in seed_url:
+        invalid_keywords = {'lancamentos', 'em-construcao', 'prontos-para-morar'}
+        if 'imoveis' in parts:
+            for part in parts:
+                if part in invalid_keywords:
+                    logger.debug(f"Discarding {url}: found invalid keyword '{part}' for construtorabrascon.com.br")
+                    return False
+            # Needs to be a specific property, not just /imoveis/
+            if len([p for p in parts if p]) > 1:
+                logger.debug(f"Accepting {url} for seed {seed_url}")
+                return True
+            else:
+                logger.debug(f"Discarding {url}: path is just /imoveis/ for construtorabrascon.com.br")
+                return False
+        else:
+            logger.debug(f"Discarding {url}: 'imoveis' not in path for construtorabrascon.com.br")
+            return False
+
+    elif 'abcconstrucoes.com.br' in seed_url:
+        if 'imovel' in parts:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: 'imovel' not in path for abcconstrucoes.com.br")
+            return False
+
+    elif 'setaigrupogp.com.br' in seed_url:
+        if 'empreendimentos' in parts:
+            if len([p for p in parts if p]) > 1:
+                logger.debug(f"Accepting {url} for seed {seed_url}")
+                return True
+            else:
+                logger.debug(f"Discarding {url}: path is just /empreendimentos/ for setaigrupogp.com.br")
+                return False
+        else:
+            logger.debug(f"Discarding {url}: 'empreendimentos' not in path for setaigrupogp.com.br")
             return False
 
     logger.debug(f"Discarding {url}: no matching rules for seed {seed_url}")

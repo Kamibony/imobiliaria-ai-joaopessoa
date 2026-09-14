@@ -26,6 +26,10 @@ def process_and_save(html_content: str, url: str, db):
         print(result.model_dump_json(indent=2))
         logger.info("-------------------------------------")
 
+        if result.status == "OUT_OF_SCOPE":
+            logger.warning(f"Project '{result.name}' discarded due to strict geo-fencing (OUT_OF_SCOPE).")
+            return
+
         data_to_save = result.model_dump(mode='json', exclude_none=False, by_alias=True)
 
         # Ensure routing to Staging
