@@ -1,3 +1,4 @@
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import logging
 import re
 import unicodedata
@@ -45,7 +46,6 @@ def process_and_save(html_content: str, url: str, db):
     except Exception as e:
         logger.error(f"Error during AI parsing for {url}: {e}")
 
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 async def extract_html_with_playwright(url: str, browser) -> str:
     page = await browser.new_page()

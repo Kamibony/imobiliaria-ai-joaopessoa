@@ -1,11 +1,18 @@
-name: Scraper Dry Run
+name: Scheduled Scraper Pipeline
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 0'
+
+concurrency:
+  group: scraper
+  cancel-in-progress: false
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -43,3 +50,7 @@ jobs:
 
       - name: Execute Crawler
         run: uv run main.py
+
+      - name: Generate Run Summary
+        if: always()
+        run: uv run summary_generator.py
