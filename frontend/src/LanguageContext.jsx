@@ -1,12 +1,18 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 
 const LanguageContext = createContext();
 
 export const LanguageProvider = ({ children }) => {
-  const [language, setLanguage] = useState('pt-BR');
+  const [language, setLanguage] = useState(() => {
+    return localStorage.getItem('appLanguage') || 'pt-BR';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('appLanguage', language);
+  }, [language]);
 
   const toggleLanguage = () => {
-    setLanguage(prev => prev === 'pt-BR' ? 'en' : 'pt-BR');
+    setLanguage((prev) => (prev === 'pt-BR' ? 'en' : 'pt-BR'));
   };
 
   return (
@@ -16,17 +22,13 @@ export const LanguageProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useLanguage = () => useContext(LanguageContext);
 
-export const getLocalizedText = (val, currentLang) => {
-  if (val === null || val === undefined) return val;
-  if (typeof val !== 'object' || Array.isArray(val)) return val;
-
-  if (val[currentLang] !== undefined) return val[currentLang];
-  if (val['pt-BR'] !== undefined) return val['pt-BR'];
-
-  const keys = Object.keys(val);
-  if (keys.length > 0) return val[keys[0]];
-
-  return ''; // Safe fallback to avoid returning raw objects to DOM
+// Helper function to extract correct string based on context language
+// eslint-disable-next-line react-refresh/only-export-components
+export const getLocalizedText = (field, currentLanguage) => {
+  if (!field) return '';
+  if (typeof field === 'string') return field;
+  return field[currentLanguage] || field['pt-BR'] || Object.values(field)[0] || '';
 };

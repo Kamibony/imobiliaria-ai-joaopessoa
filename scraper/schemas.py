@@ -14,6 +14,10 @@ class AiContextSchema(BaseModel):
     investment_roi_estimated_percent: Optional[float] = Field(default=None)
     local_advantage: BilingualAdvantage = Field(default_factory=BilingualAdvantage)
 
+class CoordinatesSchema(BaseModel):
+    lat: float = Field(description="Latitude")
+    lng: float = Field(description="Longitude")
+
 class ProjectSchema(BaseModel):
     name: str = Field(description="Nome do empreendimento imobiliário")
     developer: str = Field(description="Nome da construtora responsável")
@@ -27,6 +31,7 @@ class ProjectSchema(BaseModel):
             "required": ["neighborhood"]
         }
     )
+    coordinates: Optional[CoordinatesSchema] = Field(default=None, description="Coordenadas GPS geocodificadas do projeto")
     manual_hero_image_url: Optional[str] = Field(default=None, description="URL da imagem principal do empreendimento")
     resolution_state: str = Field(default="staged", description="Estado de resolução do projeto")
     ai_context: AiContextSchema = Field(default_factory=AiContextSchema, description="Contexto de AI do projeto")

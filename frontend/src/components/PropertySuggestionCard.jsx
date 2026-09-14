@@ -4,6 +4,8 @@ import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { getLocalizedText, useLanguage } from '../LanguageContext';
+import { useMapState } from '../MapStateContext';
+import { FiMap } from 'react-icons/fi';
 
 const PropertySuggestionCard = ({ slug }) => {
   const [project, setProject] = useState(null);
@@ -11,6 +13,7 @@ const PropertySuggestionCard = ({ slug }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { language } = useLanguage();
+  const { flyToProject } = useMapState();
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -48,19 +51,24 @@ const PropertySuggestionCard = ({ slug }) => {
   }
 
   return (
-    <div
-      onClick={() => navigate(`/projetos/${project.id}`)}
-      className="mt-3 flex flex-col sm:flex-row gap-4 p-3 border border-gray-200 rounded-lg bg-white cursor-pointer hover:shadow-md transition-shadow group"
-    >
-      <div className="w-full sm:w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-100">
+    <div className="mt-3 flex flex-col sm:flex-row gap-4 p-3 border border-gray-200 rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow group relative">
+      <div
+        className="w-full sm:w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-100 cursor-pointer"
+        onClick={() => navigate(`/projetos/${project.id}`)}
+      >
         {heroImageUrl ? (
           <img src={heroImageUrl} alt={project.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">Sem Foto</div>
         )}
       </div>
-      <div className="flex flex-col justify-center">
-        <h4 className="font-serif text-lg font-semibold text-gray-900 group-hover:text-[#c5a880] transition-colors">{project.name}</h4>
+      <div className="flex flex-col justify-center flex-1">
+        <h4
+          className="font-serif text-lg font-semibold text-gray-900 group-hover:text-[#c5a880] transition-colors cursor-pointer"
+          onClick={() => navigate(`/projetos/${project.id}`)}
+        >
+          {project.name}
+        </h4>
         <p className="text-sm text-gray-500">{project.developer || 'Construtora não informada'}</p>
         <div className="mt-2 flex gap-2">
            {project.location?.neighborhood && (
@@ -75,6 +83,20 @@ const PropertySuggestionCard = ({ slug }) => {
           )}
         </div>
       </div>
+
+      {/* Fly-to Map Button */}
+      {project.coordinates?.lat && project.coordinates?.lng && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            flyToProject(project.coordinates);
+          }}
+          className="absolute top-3 right-3 p-2 bg-gray-100 hover:bg-[#c5a880] hover:text-white rounded-full transition-colors text-gray-600"
+          title="Ver no mapa"
+        >
+          <FiMap size={16} />
+        </button>
+      )}
     </div>
   );
 };
