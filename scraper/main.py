@@ -7,6 +7,7 @@ from firebase_admin import firestore
 from playwright.async_api import async_playwright
 from spider import discover_urls
 from crawler import fetch_url
+import uuid
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -22,23 +23,65 @@ async def async_main():
         logger.error(f"Failed to initialize Firebase: {e}")
         sys.exit(1)
 
-    logger.info("Starting crawler process")
+    job_id = str(uuid.uuid4())
+    job_ref = db.collection('scraper_jobs').document(job_id)
+
+    logger.info(f"Starting crawler process. Job ID: {job_id}")
+
+    try:
+        job_ref.set({
+            "status": "running",
+            "started_at": firestore.SERVER_TIMESTAMP,
+            "metrics": {
+                "urls_discovered": 0,
+                "urls_processed": 0,
+                "urls_failed": 0
+            }
+        })
+    except Exception as e:
+        logger.error(f"Failed to create job tracking document: {e}")
+        sys.exit(1)
+
     semaphore = asyncio.Semaphore(5)
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
 
-        # Spider module integration
-        new_urls = await discover_urls(browser, db)
+            # Spider module integration
+            new_urls = await discover_urls(browser, db)
 
-        if not new_urls:
-            logger.info("No new URLs discovered. Exiting.")
-        else:
-            logger.info(f"Discovered {len(new_urls)} new URLs to process.")
-            tasks = [fetch_url(url, browser, db, semaphore) for url in new_urls]
-            await asyncio.gather(*tasks)
+            if not new_urls:
+                logger.info("No new URLs discovered. Exiting.")
+                job_ref.set({
+                    "status": "completed",
+                    "ended_at": firestore.SERVER_TIMESTAMP,
+                    "metrics": {"urls_discovered": 0}
+                }, merge=True)
+            else:
+                logger.info(f"Discovered {len(new_urls)} new URLs to process.")
+                job_ref.set({
+                    "metrics": {"urls_discovered": len(new_urls)}
+                }, merge=True)
 
-        await browser.close()
+                tasks = [fetch_url(url, browser, db, semaphore, job_ref) for url in new_urls]
+                await asyncio.gather(*tasks)
+
+            await browser.close()
+
+        job_ref.set({
+            "status": "completed",
+            "ended_at": firestore.SERVER_TIMESTAMP
+        }, merge=True)
+
+    except Exception as e:
+        logger.error(f"Fatal error during scraper execution: {e}")
+        job_ref.set({
+            "status": "failed",
+            "ended_at": firestore.SERVER_TIMESTAMP,
+            "error": str(e)
+        }, merge=True)
+        raise
 
 def main():
     asyncio.run(async_main())
