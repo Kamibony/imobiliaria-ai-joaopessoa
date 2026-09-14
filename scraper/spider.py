@@ -19,7 +19,16 @@ SEED_URLS = [
     "https://ocaconstrutora.com.br/empreendimentos/",
     "https://massai.com.br/empreendimentos",
     "https://ecoconstrucoes.com.br/imoveis/",
-    "https://www.teixeiradecarvalho.com.br/lancamentos"
+    "https://www.teixeiradecarvalho.com.br/lancamentos",
+    "https://construtoraatlantis.com.br/",
+    "https://neoabc.com.br/",
+    "https://www.tropicalconstrutora.com.br/",
+    "https://sejaconvive.com.br/",
+    "https://nordesteinc.com.br/",
+    "https://inoveconstrucao.com.br/",
+    "https://engemaxconstrucoes.com.br/",
+    "https://drxconstrucoes.com.br/",
+    "https://eqcomvc.com.br/"
 ]
 
 def is_valid_property_link(url: str, seed_url: str) -> bool:
@@ -159,13 +168,63 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
             logger.debug(f"Discarding {url}: not a specific property path for teixeiradecarvalho.com.br")
             return False
 
+    elif any(domain in seed_url for domain in [
+        'construtoraatlantis.com.br', 'neoabc.com.br', 'sejaconvive.com.br',
+        'nordesteinc.com.br', 'inoveconstrucao.com.br', 'engemaxconstrucoes.com.br',
+        'drxconstrucoes.com.br', 'eqcomvc.com.br'
+    ]):
+        property_keywords = {'imoveis', 'imovel', 'empreendimento', 'empreendimentos', 'lancamentos', 'joao-pessoa'}
+
+        # We need a property keyword, PLUS an actual specific property name in the path.
+        # If the path just ends in the keyword (or keyword + empty string from trailing slash), it's just the catalog.
+        clean_parts = [p for p in parts if p]
+        has_keyword = any(keyword in clean_parts for keyword in property_keywords)
+        has_property_name = False
+
+        if has_keyword:
+            # Find the index of the last keyword found
+            last_kw_idx = -1
+            for i, part in enumerate(clean_parts):
+                if part in property_keywords:
+                    last_kw_idx = i
+
+            # Ensure there is a path segment AFTER the property keyword
+            if last_kw_idx != -1 and last_kw_idx < len(clean_parts) - 1:
+                has_property_name = True
+
+        if has_keyword and has_property_name:
+            logger.debug(f"Accepting {url} for boutique seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for boutique seed {seed_url}")
+            return False
+
+    elif 'tropicalconstrutora.com.br' in seed_url:
+        # tropical uses a query parameter id format: /imovel.php?id=...
+        if 'imovel.php' in parts and 'id=' in url:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for tropicalconstrutora.com.br")
+            return False
+
     logger.debug(f"Discarding {url}: no matching rules for seed {seed_url}")
     return False
 
 def extract_slug_from_url(url: str) -> str:
-    path = urlparse(url).path.strip('/')
+    parsed_url = urlparse(url)
+    path = parsed_url.path.strip('/')
+
+    # Handle Tropical Construtora query parameter format
+    if 'tropicalconstrutora.com.br' in url and 'id=' in parsed_url.query:
+        # Generate slug based on the ID parameter
+        query_params = dict(q.split('=') for q in parsed_url.query.split('&') if '=' in q)
+        if 'id' in query_params:
+            return generate_slug(f"tropical-{query_params['id']}")
+
     if not path:
         return ""
+
     last_part = path.split('/')[-1]
     return generate_slug(last_part)
 
