@@ -3,6 +3,8 @@ import logging
 import re
 import unicodedata
 import asyncio
+import os
+import requests
 from parser import parse_html_to_project
 from pydantic import ValidationError
 from firebase_admin import firestore
@@ -17,6 +19,34 @@ def generate_slug(text: str) -> str:
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
+def geocode_address(address: str) -> dict:
+    """Uses Google Maps Geocoding API to fetch lat/lng coordinates."""
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY")
+    if not api_key:
+        logger.warning("GOOGLE_MAPS_API_KEY environment variable not set. Skipping geocoding.")
+        return None
+
+    try:
+        url = "https://maps.googleapis.com/maps/api/geocode/json"
+        params = {
+            "address": f"{address}, João Pessoa, PB, Brazil",
+            "key": api_key
+        }
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get("status") == "OK" and data.get("results"):
+            location = data["results"][0]["geometry"]["location"]
+            logger.info(f"Geocoding successful for '{address}': {location}")
+            return {"lat": location["lat"], "lng": location["lng"]}
+        else:
+            logger.warning(f"Geocoding failed for '{address}': {data.get('status')} - {data.get('error_message', '')}")
+            return None
+    except Exception as e:
+        logger.error(f"Error during geocoding for '{address}': {e}")
+        return None
+
 def process_and_save(html_content: str, url: str, db):
     """Synchronous parsing and saving to Firestore."""
     try:
@@ -26,11 +56,19 @@ def process_and_save(html_content: str, url: str, db):
         print(result.model_dump_json(indent=2))
         logger.info("-------------------------------------")
 
-        if result.status == "OUT_OF_SCOPE":
+        if getattr(result, 'status', None) == "OUT_OF_SCOPE":
             logger.warning(f"Project '{result.name}' discarded due to strict geo-fencing (OUT_OF_SCOPE).")
             return
 
         data_to_save = result.model_dump(mode='json', exclude_none=False, by_alias=True)
+
+        # Geocoding Step
+        neighborhood = result.location.get('neighborhood', '')
+        if neighborhood:
+            search_query = f"{result.name}, {neighborhood}"
+            coordinates = geocode_address(search_query)
+            if coordinates:
+                data_to_save['coordinates'] = coordinates
 
         # Ensure routing to Staging
         data_to_save['resolution_state'] = 'staged'
@@ -84,9 +122,6 @@ async def extract_html_with_playwright(url: str, browser) -> str:
 async def fetch_url(url: str, browser, db, semaphore: asyncio.Semaphore, job_ref=None):
     async with semaphore:
         logger.info(f"Processing URL: {url}")
-
-        # Define tenacity retry wrapper here to capture variables if needed,
-        # or apply to extract_html_with_playwright directly
 
         @retry(
             wait=wait_exponential(multiplier=1, min=2, max=10),
