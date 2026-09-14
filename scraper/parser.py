@@ -25,6 +25,12 @@ def parse_html_to_project(html_content: str) -> ProjectSchema:
     Map the data to the provided schema.
     If an image URL is not found, leave it as null.
 
+    CRITICAL RULES FOR AI GEO-FENCING (STRICT SCOPE):
+    You MUST act as a strict geographic gatekeeper.
+    Allowed Scope: The project MUST be located in João Pessoa OR the adjacent coastal premium neighborhoods of Cabedelo (e.g., Intermares, Camboinha, Ponta de Campina).
+    Target Neighborhoods: Cabo Branco, Tambaú, Manaíra, Bessa, Altiplano, Jardim Oceania, Brisamar, Miramar.
+    Rejection Logic: If you determine the project is located in a completely different city outside this coastal zone (such as Bananeiras, Campina Grande, etc.), you MUST set the `status` field explicitly to "OUT_OF_SCOPE".
+
     CRITICAL RULES FOR AI CONTEXT GENERATION (João Pessoa Market):
     You MUST dynamically generate the `ai_context` field (specifically `target_persona` and `local_advantage` in 'pt-BR' and 'en') based on the following strict rules:
 
