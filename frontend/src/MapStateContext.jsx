@@ -16,7 +16,7 @@ export const MapStateProvider = ({ children }) => {
         center: coordinates,
         zoom: 16,
         tilt: 45,
-        heading: 0,
+        heading: 20,
       });
     }
   }, [mapInstance]);
