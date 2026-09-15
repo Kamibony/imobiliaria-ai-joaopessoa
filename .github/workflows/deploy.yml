@@ -48,6 +48,8 @@ jobs:
       - name: Build frontend
         run: npm run build
         working-directory: ./frontend
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: '${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}'
 
       - name: Authenticate to Google Cloud
         id: auth
