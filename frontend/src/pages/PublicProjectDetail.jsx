@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useLanguage, getLocalizedText } from '../LanguageContext';
+import { useMapState } from '../MapStateContext';
 
 const PublicProjectDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { language } = useLanguage();
+  const { flyToProject } = useMapState();
   const [project, setProject] = useState(null);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +23,9 @@ const PublicProjectDetail = () => {
         if (docSnap.exists()) {
           const data = { id: docSnap.id, ...docSnap.data() };
           setProject(data);
+          if (data.coordinates) {
+            flyToProject(data.coordinates);
+          }
         } else {
           console.error("No such project!");
           navigate('/');
@@ -33,7 +38,7 @@ const PublicProjectDetail = () => {
     };
 
     fetchProject();
-  }, [id, navigate]);
+  }, [id, navigate, flyToProject]);
 
   useEffect(() => {
     if (!id) return;
@@ -96,17 +101,6 @@ const PublicProjectDetail = () => {
           pointerEvents: 'none'
         }}
       >
-        {/* Gradient Overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0, left: 0, width: '100%', height: '100%',
-            background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 60%)',
-            zIndex: 1,
-            pointerEvents: 'none'
-          }}
-        />
-
         {/* Navbar-ish back button */}
         <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 10, pointerEvents: 'auto' }}>
           <button

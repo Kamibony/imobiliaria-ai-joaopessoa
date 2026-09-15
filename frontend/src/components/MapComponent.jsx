@@ -36,16 +36,6 @@ const MapComponent = ({ children }) => {
         <ProjectMarkers />
         {children}
       </Map>
-      {/* Overlay to ensure the map fades nicely into the dark layout if needed */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, width: '100%', height: '100%',
-          pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(17,17,17,0.3) 0%, rgba(17,17,17,0.8) 100%)',
-          zIndex: 1
-        }}
-      />
     </div>
   );
 };
