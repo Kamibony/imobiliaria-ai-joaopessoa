@@ -9,6 +9,7 @@ const ProjectCard = ({ project }) => {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const [heroImageUrl, setHeroImageUrl] = useState(null);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     if (project?.manual_hero_image_url) {
@@ -60,7 +61,7 @@ const ProjectCard = ({ project }) => {
       }}
     >
       <div style={{ height: '240px', overflow: 'hidden', position: 'relative' }}>
-        {heroImageUrl ? (
+        {heroImageUrl && !imgError ? (
           <img
             className="card-image"
             src={heroImageUrl}
@@ -71,6 +72,7 @@ const ProjectCard = ({ project }) => {
               objectFit: 'cover',
               transition: 'transform 0.5s ease'
             }}
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="image-placeholder">Em Breve</div>
