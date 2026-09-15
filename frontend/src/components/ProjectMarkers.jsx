@@ -53,7 +53,7 @@ const ProjectMarkers = () => {
         return (
           <AdvancedMarker
             key={project.id}
-            position={{ lat: coords.lat, lng: coords.lng }}
+            position={{ lat: Number(coords.lat), lng: Number(coords.lng) }}
             title={project.name}
             onClick={() => navigate(`/projetos/${project.id}`)}
             zIndex={isActive ? 1000 : undefined}

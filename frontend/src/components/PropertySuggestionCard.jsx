@@ -10,6 +10,7 @@ import { FiMap } from 'react-icons/fi';
 const PropertySuggestionCard = ({ slug }) => {
   const [project, setProject] = useState(null);
   const [heroImageUrl, setHeroImageUrl] = useState(null);
+  const [imgError, setImgError] = useState(false);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { language } = useLanguage();
@@ -56,8 +57,13 @@ const PropertySuggestionCard = ({ slug }) => {
         className="w-full sm:w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-100 cursor-pointer"
         onClick={() => navigate(`/projetos/${project.id}`)}
       >
-        {heroImageUrl ? (
-          <img src={heroImageUrl} alt={project.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        {heroImageUrl && !imgError ? (
+          <img
+            src={heroImageUrl}
+            alt={project.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+            onError={() => setImgError(true)}
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">Sem Foto</div>
         )}

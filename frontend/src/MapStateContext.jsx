@@ -19,7 +19,7 @@ export const MapStateProvider = ({ children }) => {
       // If the map is already ready, move immediately
       if (mapInstance) {
         mapInstance.moveCamera({
-          center: target,
+          center: { lat: Number(target.lat), lng: Number(target.lng) },
           zoom: 18,
           tilt: 45,
           heading: 20,
@@ -31,7 +31,7 @@ export const MapStateProvider = ({ children }) => {
   React.useEffect(() => {
     if (mapInstance && activeCameraTarget) {
       mapInstance.moveCamera({
-        center: activeCameraTarget,
+        center: { lat: Number(activeCameraTarget.lat), lng: Number(activeCameraTarget.lng) },
         zoom: 18,
         tilt: 45,
         heading: 20,
