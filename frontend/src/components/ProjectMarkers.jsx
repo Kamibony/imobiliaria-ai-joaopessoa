@@ -34,7 +34,11 @@ const ProjectMarkers = () => {
     const unsubscribe = onSnapshot(projectsRef, (snapshot) => {
       const projectsData = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(p => p.resolution_state !== 'staged' && p.coordinates && p.coordinates.lat && p.coordinates.lng);
+        .filter(p => {
+          if (p.resolution_state === 'staged') return false;
+          const coords = p.coordinates || p.location?.coordinates;
+          return coords && coords.lat && coords.lng;
+        });
       setProjects(projectsData);
     });
 
@@ -45,10 +49,11 @@ const ProjectMarkers = () => {
     <>
       {projects.map((project) => {
         const isActive = project.id === activeProjectId;
+        const coords = project.coordinates || project.location?.coordinates;
         return (
           <AdvancedMarker
             key={project.id}
-            position={{ lat: project.coordinates.lat, lng: project.coordinates.lng }}
+            position={{ lat: coords.lat, lng: coords.lng }}
             title={project.name}
             onClick={() => navigate(`/projetos/${project.id}`)}
             zIndex={isActive ? 1000 : undefined}

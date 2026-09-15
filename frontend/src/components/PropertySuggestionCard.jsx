@@ -85,11 +85,11 @@ const PropertySuggestionCard = ({ slug }) => {
       </div>
 
       {/* Fly-to Map Button */}
-      {project.coordinates?.lat && project.coordinates?.lng && (
+      {((project.coordinates?.lat && project.coordinates?.lng) || (project.location?.coordinates?.lat && project.location?.coordinates?.lng)) && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            flyToProject(project.coordinates);
+            flyToProject(project.coordinates || project.location?.coordinates);
           }}
           className="absolute top-3 right-3 p-2 bg-gray-100 hover:bg-[#c5a880] hover:text-white rounded-full transition-colors text-gray-600"
           title="Ver no mapa"

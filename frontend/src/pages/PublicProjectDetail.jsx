@@ -23,8 +23,9 @@ const PublicProjectDetail = () => {
         if (docSnap.exists()) {
           const data = { id: docSnap.id, ...docSnap.data() };
           setProject(data);
-          if (data.coordinates) {
-            flyToProject(data.coordinates);
+          const coords = data.coordinates || data.location?.coordinates;
+          if (coords) {
+            flyToProject(coords);
           }
         } else {
           console.error("No such project!");
