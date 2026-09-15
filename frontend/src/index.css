@@ -37,7 +37,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   /* Removed Vite default centering constraints */
-  background-color: var(--color-bg);
+  background-color: transparent;
   color: var(--color-text-main);
 }
 

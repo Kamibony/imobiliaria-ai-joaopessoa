@@ -188,14 +188,17 @@ const PublicHome = () => {
             style={{
               position: 'absolute',
               top: 0, left: 0, width: '100%', height: '100%',
-              objectFit: 'cover', zIndex: 0
+              objectFit: 'cover', zIndex: 0,
+              opacity: 0.6,
+              WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)',
+              maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)'
             }}
           />
         ) : (
           <div style={{
             position: 'absolute',
             top: 0, left: 0, width: '100%', height: '100%',
-            background: 'linear-gradient(135deg, #1c1c1c 0%, #2c2c2c 100%)', opacity: 0.8, zIndex: 0
+            background: 'linear-gradient(135deg, #1c1c1c 0%, #2c2c2c 100%)', opacity: 0.4, zIndex: 0
           }} />
         )}
 
@@ -205,7 +208,8 @@ const PublicHome = () => {
             position: 'absolute',
             top: 0, left: 0, width: '100%', height: '100%',
             background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 60%)',
-            zIndex: 1
+            zIndex: 1,
+            pointerEvents: 'none'
           }}
         />
 
@@ -241,7 +245,7 @@ const PublicHome = () => {
       <div style={{ padding: '4rem 2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* Filters */}
         <div style={{ marginBottom: '3rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-sans)', color: 'var(--color-text-main)' }}>Filtrar por Região:</strong>
+          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-sans)', color: 'white' }}>Filtrar por Região:</strong>
           {['All', 'Cabo Branco', 'Tambaú', 'Manaíra', 'Bessa'].map(bairro => (
             <button
               key={bairro}
@@ -249,9 +253,9 @@ const PublicHome = () => {
               style={{
                 padding: '0.5rem 1.25rem',
                 borderRadius: '9999px',
-                border: filterBairro === bairro ? `1px solid var(--color-black)` : '1px solid #d1d5db',
-                backgroundColor: filterBairro === bairro ? 'var(--color-black)' : 'transparent',
-                color: filterBairro === bairro ? 'white' : 'var(--color-text-main)',
+                border: filterBairro === bairro ? '1px solid var(--color-accent-gold)' : '1px solid rgba(255,255,255,0.3)',
+                backgroundColor: filterBairro === bairro ? 'var(--color-accent-gold)' : 'rgba(0,0,0,0.4)',
+                color: 'white',
                 fontFamily: 'var(--font-sans)',
                 fontWeight: filterBairro === bairro ? '500' : '400',
               }}
@@ -270,7 +274,7 @@ const PublicHome = () => {
 
         {filteredProjects.length === 0 && (
           <div style={{ padding: '4rem 0', textAlign: 'center' }}>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem' }}>Nenhum projeto encontrado para esta região.</p>
+            <p style={{ color: '#e5e7eb', fontSize: '1.1rem' }}>Nenhum projeto encontrado para esta região.</p>
           </div>
         )}
       </div>
