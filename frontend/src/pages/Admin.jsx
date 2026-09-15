@@ -1,7 +1,7 @@
 import ErrorBoundary from '../ErrorBoundary';
 import { LanguageProvider, useLanguage, getLocalizedText } from '../LanguageContext';
 import React, { useState, useEffect, useMemo } from 'react'
-import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs, updateDoc, setDoc } from 'firebase/firestore'
+import { collection, onSnapshot, deleteDoc, doc, getDocs, updateDoc, setDoc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 import { getStorage, ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
@@ -444,6 +444,7 @@ function Admin() {
     });
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getLatestSnapshot = (property) => {
     const snapshots = property.snapshots || [];
     const sortedSnapshots = [...snapshots].sort((a, b) => {
