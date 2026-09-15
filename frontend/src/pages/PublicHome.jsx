@@ -162,17 +162,6 @@ const PublicHome = () => {
           pointerEvents: 'none'
         }}
       >
-        {/* Gradient Overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0, left: 0, width: '100%', height: '100%',
-            background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 60%)',
-            zIndex: 1,
-            pointerEvents: 'none'
-          }}
-        />
-
         <div style={{ position: 'relative', zIndex: 2, padding: '2rem', maxWidth: '800px', pointerEvents: 'none' }}>
           <h1 style={{ color: 'white', marginBottom: '1.5rem', textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
             O Exclusivo de João Pessoa

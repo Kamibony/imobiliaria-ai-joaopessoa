@@ -14,7 +14,7 @@ export const MapStateProvider = ({ children }) => {
       setActiveCameraTarget(coordinates);
       mapInstance.moveCamera({
         center: coordinates,
-        zoom: 16,
+        zoom: 18,
         tilt: 45,
         heading: 20,
       });
