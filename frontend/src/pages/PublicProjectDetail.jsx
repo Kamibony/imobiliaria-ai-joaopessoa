@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, onSnapshot } from 'firebase/firestore';
-import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { db } from '../firebase';
 import { useLanguage, getLocalizedText } from '../LanguageContext';
 
@@ -12,7 +11,6 @@ const PublicProjectDetail = () => {
   const [project, setProject] = useState(null);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [heroImageUrl, setHeroImageUrl] = useState(null);
   const [hoveredUnitId, setHoveredUnitId] = useState(null);
 
   useEffect(() => {
@@ -23,15 +21,6 @@ const PublicProjectDetail = () => {
         if (docSnap.exists()) {
           const data = { id: docSnap.id, ...docSnap.data() };
           setProject(data);
-
-          if (data.manual_hero_image_url) {
-            setHeroImageUrl(data.manual_hero_image_url);
-          } else if (data.assets?.hero_images && data.assets.hero_images.length > 0) {
-            const storage = getStorage();
-            const fileRef = ref(storage, data.assets.hero_images[0]);
-            const downloadURL = await getDownloadURL(fileRef);
-            setHeroImageUrl(downloadURL);
-          }
         } else {
           console.error("No such project!");
           navigate('/');
@@ -88,7 +77,7 @@ const PublicProjectDetail = () => {
   };
 
   return (
-    <div className="public-project-detail fade-in">
+    <div className="public-project-detail fade-in" style={{ pointerEvents: 'none' }}>
       {/* Header / Hero Image */}
       <div
         style={{
@@ -104,34 +93,22 @@ const PublicProjectDetail = () => {
           boxSizing: 'border-box',
           marginLeft: 'calc(-50vw + 50%)',
           marginRight: 'calc(-50vw + 50%)',
+          pointerEvents: 'none'
         }}
       >
-        {heroImageUrl ? (
-          <img
-            src={heroImageUrl}
-            alt={project.name}
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, width: '100%', height: '100%',
-              objectFit: 'cover', zIndex: 0
-            }}
-          />
-        ) : (
-          <div className="image-placeholder" style={{ position: 'absolute', top: 0, left: 0, opacity: 0.2, zIndex: 0 }} />
-        )}
-
         {/* Gradient Overlay */}
         <div
           style={{
             position: 'absolute',
             top: 0, left: 0, width: '100%', height: '100%',
             background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 60%)',
-            zIndex: 1
+            zIndex: 1,
+            pointerEvents: 'none'
           }}
         />
 
         {/* Navbar-ish back button */}
-        <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 10 }}>
+        <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 10, pointerEvents: 'auto' }}>
           <button
             onClick={() => navigate('/')}
             style={{
@@ -178,7 +155,7 @@ const PublicProjectDetail = () => {
         </div>
       </div>
 
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '4rem 2rem' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '4rem 2rem', pointerEvents: 'none' }}>
 
         {/* Layout Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '5rem' }}>
@@ -188,7 +165,8 @@ const PublicProjectDetail = () => {
             backgroundColor: 'var(--color-surface)',
             padding: '3rem',
             borderRadius: '4px',
-            border: '1px solid #e5e7eb'
+            border: '1px solid #e5e7eb',
+            pointerEvents: 'auto'
           }}>
             <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Ficha Técnica</h2>
 
@@ -222,7 +200,8 @@ const PublicProjectDetail = () => {
               backgroundColor: 'var(--color-surface)',
               padding: '3rem',
               borderRadius: '4px',
-              border: '1px solid #e5e7eb'
+              border: '1px solid #e5e7eb',
+              pointerEvents: 'auto'
             }}>
               <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Comodidades</h2>
 
@@ -243,7 +222,7 @@ const PublicProjectDetail = () => {
 
         {/* Smart Canvas Unit Grid */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: '2px solid var(--color-black)', paddingBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: '2px solid var(--color-black)', paddingBottom: '1rem', pointerEvents: 'auto' }}>
             <h2 style={{ fontSize: '2.5rem', margin: 0, fontFamily: 'var(--font-serif)' }}>Smart Canvas</h2>
             <p style={{ color: 'var(--color-text-muted)', margin: 0, fontWeight: '500' }}>{units.length} Unidades Disponíveis</p>
           </div>
@@ -273,7 +252,8 @@ const PublicProjectDetail = () => {
                       flexDirection: 'column',
                       justifyContent: 'center',
                       alignItems: 'center',
-                      transition: 'all 0.3s ease'
+                      transition: 'all 0.3s ease',
+                      pointerEvents: 'auto'
                     }}
                     onMouseEnter={() => setHoveredUnitId(unit.id)}
                     onMouseLeave={() => setHoveredUnitId(null)}

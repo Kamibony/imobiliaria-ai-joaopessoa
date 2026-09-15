@@ -42,7 +42,8 @@ const ProjectCard = ({ project }) => {
         transition: 'all 0.3s ease',
         display: 'flex',
         flexDirection: 'column',
-        height: '100%'
+        height: '100%',
+        pointerEvents: 'auto'
       }}
       onClick={() => navigate(`/projetos/${project.id}`)}
       onMouseEnter={(e) => {
@@ -106,7 +107,7 @@ const PublicHome = () => {
   const { language } = useLanguage();
   const [projects, setProjects] = useState([]);
   const [featuredProject, setFeaturedProject] = useState(null);
-  const [featuredImageUrl, setFeaturedImageUrl] = useState(null);
+
   const [filterBairro, setFilterBairro] = useState('All');
   const navigate = useNavigate();
 
@@ -132,27 +133,6 @@ const PublicHome = () => {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (featuredProject?.manual_hero_image_url) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFeaturedImageUrl(featuredProject.manual_hero_image_url);
-    } else if (featuredProject?.assets?.hero_images && featuredProject.assets.hero_images.length > 0) {
-      const fetchHeroImage = async () => {
-        try {
-          const storage = getStorage();
-          const fileRef = ref(storage, featuredProject.assets.hero_images[0]);
-          const downloadURL = await getDownloadURL(fileRef);
-          setFeaturedImageUrl(downloadURL);
-        } catch (error) {
-          console.error("Error fetching hero image URL:", error);
-        }
-      };
-      fetchHeroImage();
-    } else {
-      setFeaturedImageUrl(null);
-    }
-  }, [featuredProject]);
-
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       if (filterBairro === 'All') return true;
@@ -162,7 +142,7 @@ const PublicHome = () => {
   }, [projects, filterBairro, language]);
 
   return (
-    <div className="public-home fade-in">
+    <div className="public-home fade-in" style={{ pointerEvents: 'none' }}>
       {/* Hero Section */}
       <div
         className="hero-section"
@@ -179,29 +159,9 @@ const PublicHome = () => {
           overflow: 'hidden',
           marginLeft: 'calc(-50vw + 50%)',
           marginRight: 'calc(-50vw + 50%)',
+          pointerEvents: 'none'
         }}
       >
-        {featuredImageUrl ? (
-          <img
-            src={featuredImageUrl}
-            alt={featuredProject?.name}
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, width: '100%', height: '100%',
-              objectFit: 'cover', zIndex: 0,
-              opacity: 0.6,
-              WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)',
-              maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)'
-            }}
-          />
-        ) : (
-          <div style={{
-            position: 'absolute',
-            top: 0, left: 0, width: '100%', height: '100%',
-            background: 'linear-gradient(135deg, #1c1c1c 0%, #2c2c2c 100%)', opacity: 0.4, zIndex: 0
-          }} />
-        )}
-
         {/* Gradient Overlay */}
         <div
           style={{
@@ -231,7 +191,8 @@ const PublicHome = () => {
                 border: 'none',
                 borderRadius: '4px',
                 textTransform: 'uppercase',
-                letterSpacing: '0.1em'
+                letterSpacing: '0.1em',
+                pointerEvents: 'auto'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold-hover)'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold)'}
@@ -242,9 +203,9 @@ const PublicHome = () => {
         </div>
       </div>
 
-      <div style={{ padding: '4rem 2rem', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{ padding: '4rem 2rem', maxWidth: '1400px', margin: '0 auto', pointerEvents: 'none' }}>
         {/* Filters */}
-        <div style={{ marginBottom: '3rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ marginBottom: '3rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', pointerEvents: 'auto' }}>
           <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-sans)', color: 'white' }}>Filtrar por Região:</strong>
           {['All', 'Cabo Branco', 'Tambaú', 'Manaíra', 'Bessa'].map(bairro => (
             <button
@@ -258,6 +219,7 @@ const PublicHome = () => {
                 color: 'white',
                 fontFamily: 'var(--font-sans)',
                 fontWeight: filterBairro === bairro ? '500' : '400',
+                pointerEvents: 'auto'
               }}
             >
               {bairro === 'All' ? 'Todos' : bairro}
