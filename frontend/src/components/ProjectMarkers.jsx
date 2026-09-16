@@ -18,7 +18,7 @@ const NEIGHBORHOOD_COORDS = {
   'miramar': { lat: -7.1189, lng: -34.8394 },
 };
 
-const getFallbackCoordinates = (neighborhood, projectId) => {
+const getFallbackCoordinates = (neighborhood) => {
   const defaultCoords = { lat: -7.1150, lng: -34.8250 }; // General Joao Pessoa fallback
   let baseCoords = defaultCoords;
 
@@ -31,24 +31,7 @@ const getFallbackCoordinates = (neighborhood, projectId) => {
     }
   }
 
-  // Generate a deterministic offset based on the project ID string
-  // This prevents multiple projects in the same neighborhood from completely overlapping
-  let hash = 0;
-  if (projectId) {
-    for (let i = 0; i < projectId.length; i++) {
-      hash = projectId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-  }
-
-  // Use the hash to generate small lat/lng offsets (approx +/- 0.005 degrees)
-  // Seed a pseudo-random number generator
-  const offsetLat = ((Math.abs(hash) % 100) / 100 - 0.5) * 0.01;
-  const offsetLng = ((Math.abs(hash >> 8) % 100) / 100 - 0.5) * 0.01;
-
-  return {
-    lat: baseCoords.lat + offsetLat,
-    lng: baseCoords.lng + offsetLng
-  };
+  return baseCoords;
 };
 
 const GlowingGoldPin = ({ isActive }) => (
@@ -104,7 +87,7 @@ const ProjectMarkers = () => {
         } else {
           // If coordinates are missing or invalid, fall back to neighborhood-based coordinates
           const neighborhood = project.location?.neighborhood || project.ai_context?.local_advantage || '';
-          finalCoords = getFallbackCoordinates(neighborhood, project.id);
+          finalCoords = getFallbackCoordinates(neighborhood);
         }
 
         return (

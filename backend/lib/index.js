@@ -40,6 +40,7 @@ const storage_1 = require("firebase-functions/v2/storage");
 const admin = __importStar(require("firebase-admin"));
 const vertexai_1 = require("@google-cloud/vertexai");
 const schema_1 = require("./schema");
+const google_maps_services_js_1 = require("@googlemaps/google-maps-services-js");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
@@ -50,6 +51,7 @@ const { createCanvas } = require('canvas');
 const cors = require("cors");
 admin.initializeApp();
 const apiSecret = (0, params_1.defineSecret)("API_SECRET");
+const mapsKey = (0, params_1.defineSecret)("GOOGLE_MAPS_API_KEY");
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
 let vertexAiInstance = null;
@@ -154,6 +156,7 @@ exports.askConcierge = (0, https_2.onCall)({ cors: true, maxInstances: 5 }, asyn
 });
 exports.ingestPdf = (0, storage_1.onObjectFinalized)({
     timeoutSeconds: 300,
+    secrets: [mapsKey],
 }, async (event) => {
     const fileBucket = event.data.bucket;
     const filePath = event.data.name;
@@ -417,25 +420,62 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         projectData.needs_geocoding = false;
         if (projectData.location) {
             if (projectData.location.coordinates?.lat == null || projectData.location.coordinates?.lng == null) {
-                projectData.needs_geocoding = true;
-                const fuzzyNeighborhood = projectData.location.neighborhood ? (0, utils_1.fuzzyMatchNeighborhood)(projectData.location.neighborhood) : null;
                 // Ensure coordinates object exists
                 projectData.location.coordinates = { lat: null, lng: null };
-                if (fuzzyNeighborhood === 'Cabo Branco') {
-                    projectData.location.coordinates.lat = -7.1354;
-                    projectData.location.coordinates.lng = -34.8210;
+                let geocoded = false;
+                try {
+                    const client = new google_maps_services_js_1.Client({});
+                    const address = `${projectData.name || ''}, ${projectData.location.neighborhood || ''}, João Pessoa, PB`.replace(/^,\s*/, '');
+                    console.log(`Geocoding project: ${address}`);
+                    let apiKey = '';
+                    try {
+                        apiKey = mapsKey.value();
+                    }
+                    catch (e) {
+                        apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
+                    }
+                    if (apiKey) {
+                        const geoRes = await client.geocode({
+                            params: {
+                                address: address,
+                                key: apiKey,
+                            }
+                        });
+                        if (geoRes.data.results && geoRes.data.results.length > 0) {
+                            const exactLocation = geoRes.data.results[0].geometry.location;
+                            projectData.location.coordinates.lat = exactLocation.lat;
+                            projectData.location.coordinates.lng = exactLocation.lng;
+                            projectData.needs_geocoding = false;
+                            geocoded = true;
+                            console.log(`Successfully geocoded to lat: ${exactLocation.lat}, lng: ${exactLocation.lng}`);
+                        }
+                    }
+                    else {
+                        console.log("No GOOGLE_MAPS_API_KEY available for geocoding.");
+                    }
                 }
-                else if (fuzzyNeighborhood === 'Tambau') {
-                    projectData.location.coordinates.lat = -7.1165;
-                    projectData.location.coordinates.lng = -34.8228;
+                catch (error) {
+                    console.error("Geocoding failed:", error);
                 }
-                else if (fuzzyNeighborhood === 'Bessa') {
-                    projectData.location.coordinates.lat = -7.0658;
-                    projectData.location.coordinates.lng = -34.8322;
-                }
-                else {
-                    projectData.location.coordinates.lat = -7.1150;
-                    projectData.location.coordinates.lng = -34.8630;
+                if (!geocoded) {
+                    projectData.needs_geocoding = true;
+                    const fuzzyNeighborhood = projectData.location.neighborhood ? (0, utils_1.fuzzyMatchNeighborhood)(projectData.location.neighborhood) : null;
+                    if (fuzzyNeighborhood === 'Cabo Branco') {
+                        projectData.location.coordinates.lat = -7.1354;
+                        projectData.location.coordinates.lng = -34.8210;
+                    }
+                    else if (fuzzyNeighborhood === 'Tambau') {
+                        projectData.location.coordinates.lat = -7.1165;
+                        projectData.location.coordinates.lng = -34.8228;
+                    }
+                    else if (fuzzyNeighborhood === 'Bessa') {
+                        projectData.location.coordinates.lat = -7.0658;
+                        projectData.location.coordinates.lng = -34.8322;
+                    }
+                    else {
+                        projectData.location.coordinates.lat = -7.1150;
+                        projectData.location.coordinates.lng = -34.8630;
+                    }
                 }
             }
         }
