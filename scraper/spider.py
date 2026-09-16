@@ -2,7 +2,6 @@ import asyncio
 import logging
 from urllib.parse import urlparse
 from playwright.async_api import Browser
-from playwright_stealth import stealth_async
 from crawler import generate_slug
 
 logger = logging.getLogger(__name__)
@@ -264,7 +263,6 @@ async def discover_urls(browser: Browser, db) -> list[str]:
         for attempt in range(max_retries):
             try:
                 page = await browser.new_page()
-                await stealth_async(page)
                 # Use domcontentloaded for faster loading and avoid waiting for all tracking scripts
                 await page.goto(seed, wait_until="domcontentloaded", timeout=30000)
 

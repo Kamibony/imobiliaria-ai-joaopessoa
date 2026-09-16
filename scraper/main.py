@@ -5,6 +5,7 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 from playwright.async_api import async_playwright
+from playwright_stealth import Stealth
 from spider import discover_urls
 from crawler import fetch_url
 import uuid
@@ -45,7 +46,7 @@ async def async_main():
     semaphore = asyncio.Semaphore(5)
 
     try:
-        async with async_playwright() as p:
+        async with Stealth().use_async(async_playwright()) as p:
             browser = await p.chromium.launch(headless=True)
 
             # Spider module integration

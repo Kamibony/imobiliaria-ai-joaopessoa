@@ -9,7 +9,6 @@ from parser import parse_html_to_project
 from pydantic import ValidationError
 from firebase_admin import firestore
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-from playwright_stealth import stealth_async
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +91,6 @@ def process_and_save(html_content: str, url: str, db):
 
 async def extract_html_with_playwright(url: str, browser) -> str:
     page = await browser.new_page()
-    await stealth_async(page)
     try:
         logger.info(f"Navigating to {url}...")
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
