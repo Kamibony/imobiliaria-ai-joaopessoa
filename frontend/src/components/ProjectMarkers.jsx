@@ -4,6 +4,53 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useNavigate, useLocation } from 'react-router-dom';
 
+// Fallback coordinates based on João Pessoa neighborhoods
+const NEIGHBORHOOD_COORDS = {
+  'cabo branco': { lat: -7.1356, lng: -34.8213 },
+  'tambaú': { lat: -7.1123, lng: -34.8239 },
+  'tambau': { lat: -7.1123, lng: -34.8239 },
+  'bessa': { lat: -7.0658, lng: -34.8329 },
+  'manaíra': { lat: -7.0984, lng: -34.8300 },
+  'manaira': { lat: -7.0984, lng: -34.8300 },
+  'altiplano': { lat: -7.1436, lng: -34.8321 },
+  'jardim oceania': { lat: -7.0805, lng: -34.8353 },
+  'brisamar': { lat: -7.1086, lng: -34.8361 },
+  'miramar': { lat: -7.1189, lng: -34.8394 },
+};
+
+const getFallbackCoordinates = (neighborhood, projectId) => {
+  const defaultCoords = { lat: -7.1150, lng: -34.8250 }; // General Joao Pessoa fallback
+  let baseCoords = defaultCoords;
+
+  if (neighborhood) {
+    const normalized = neighborhood.toLowerCase();
+    // Find exact or partial match
+    const match = Object.keys(NEIGHBORHOOD_COORDS).find(k => normalized.includes(k));
+    if (match) {
+      baseCoords = NEIGHBORHOOD_COORDS[match];
+    }
+  }
+
+  // Generate a deterministic offset based on the project ID string
+  // This prevents multiple projects in the same neighborhood from completely overlapping
+  let hash = 0;
+  if (projectId) {
+    for (let i = 0; i < projectId.length; i++) {
+      hash = projectId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+  }
+
+  // Use the hash to generate small lat/lng offsets (approx +/- 0.005 degrees)
+  // Seed a pseudo-random number generator
+  const offsetLat = ((Math.abs(hash) % 100) / 100 - 0.5) * 0.01;
+  const offsetLng = ((Math.abs(hash >> 8) % 100) / 100 - 0.5) * 0.01;
+
+  return {
+    lat: baseCoords.lat + offsetLat,
+    lng: baseCoords.lng + offsetLng
+  };
+};
+
 const GlowingGoldPin = ({ isActive }) => (
   <div style={{
     width: isActive ? '36px' : '24px',
@@ -34,11 +81,7 @@ const ProjectMarkers = () => {
     const unsubscribe = onSnapshot(projectsRef, (snapshot) => {
       const projectsData = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(p => {
-          if (p.resolution_state === 'staged') return false;
-          const coords = p.coordinates || p.location?.coordinates;
-          return coords && coords.lat && coords.lng;
-        });
+        .filter(p => p.resolution_state !== 'staged');
       setProjects(projectsData);
     });
 
@@ -49,11 +92,25 @@ const ProjectMarkers = () => {
     <>
       {projects.map((project) => {
         const isActive = project.id === activeProjectId;
-        const coords = project.coordinates || project.location?.coordinates;
+
+        let rawCoords = project.coordinates || project.location?.coordinates;
+        let finalCoords;
+
+        if (rawCoords && rawCoords.lat && rawCoords.lng) {
+          finalCoords = {
+            lat: Number(rawCoords.lat),
+            lng: Number(rawCoords.lng)
+          };
+        } else {
+          // If coordinates are missing or invalid, fall back to neighborhood-based coordinates
+          const neighborhood = project.location?.neighborhood || project.ai_context?.local_advantage || '';
+          finalCoords = getFallbackCoordinates(neighborhood, project.id);
+        }
+
         return (
           <AdvancedMarker
             key={project.id}
-            position={{ lat: Number(coords.lat), lng: Number(coords.lng) }}
+            position={finalCoords}
             title={project.name}
             onClick={() => navigate(`/projetos/${project.id}`)}
             zIndex={isActive ? 1000 : undefined}
