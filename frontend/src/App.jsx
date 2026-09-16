@@ -20,7 +20,7 @@ function App() {
         {!isAdmin && <MapComponent />}
 
         {/* Main routes overlay the map */}
-        <div style={{ position: 'relative', zIndex: 10, pointerEvents: 'none' }}>
+        <div style={{ position: 'relative', zIndex: 10, pointerEvents: isAdmin ? 'auto' : 'none' }}>
           <Routes>
             <Route path="/" element={<PublicHome />} />
             <Route path="/projetos/:id" element={<PublicProjectDetail />} />
