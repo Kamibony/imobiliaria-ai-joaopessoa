@@ -2,6 +2,7 @@ import asyncio
 import logging
 from urllib.parse import urlparse
 from playwright.async_api import Browser
+from playwright_stealth import stealth_async
 from crawler import generate_slug
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,10 @@ SEED_URLS = [
     "https://inoveconstrucao.com.br/",
     "https://engemaxconstrucoes.com.br/",
     "https://drxconstrucoes.com.br/",
-    "https://eqcomvc.com.br/"
+    "https://eqcomvc.com.br/",
+    "https://mouradubeux.com.br/",
+    "https://planc.com.br/",
+    "https://hofmannstation.com.br/"
 ]
 
 def is_valid_property_link(url: str, seed_url: str) -> bool:
@@ -50,8 +54,8 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
 
     if 'mgaconstrucoes.com.br' in seed_url:
         invalid_keywords = {
-            'blog', 'contato', 'em-construcao', 'entregues', 'imoveis',
-            'lancamentos', 'paraibanamente', 'pg-principal',
+            'blog', 'contato', 'entregues', 'imoveis',
+            'paraibanamente', 'pg-principal',
             'politica-de-privacidade', 'quem-somos', 'todos-empreendimentos',
             'trabalhe-conosco'
         }
@@ -87,18 +91,15 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
             return False
 
     elif 'construtorabrascon.com.br' in seed_url:
-        invalid_keywords = {'lancamentos', 'em-construcao', 'prontos-para-morar'}
         if 'imoveis' in parts:
-            for part in parts:
-                if part in invalid_keywords:
-                    logger.debug(f"Discarding {url}: found invalid keyword '{part}' for construtorabrascon.com.br")
-                    return False
-            # Needs to be a specific property, not just /imoveis/
-            if len([p for p in parts if p]) > 1:
+            # Needs to be a specific property, not just /imoveis/ or a category
+            # Ensure the path is longer than just the category keywords
+            clean_parts = [p for p in parts if p]
+            if len(clean_parts) > 1 and clean_parts[-1] not in {'lancamentos', 'em-construcao', 'prontos-para-morar'}:
                 logger.debug(f"Accepting {url} for seed {seed_url}")
                 return True
             else:
-                logger.debug(f"Discarding {url}: path is just /imoveis/ for construtorabrascon.com.br")
+                logger.debug(f"Discarding {url}: path is just a category for construtorabrascon.com.br")
                 return False
         else:
             logger.debug(f"Discarding {url}: 'imoveis' not in path for construtorabrascon.com.br")
@@ -208,6 +209,30 @@ def is_valid_property_link(url: str, seed_url: str) -> bool:
             logger.debug(f"Discarding {url}: not a specific property path for tropicalconstrutora.com.br")
             return False
 
+    elif 'mouradubeux.com.br' in seed_url:
+        if 'imoveis' in parts and len([p for p in parts if p]) > 1:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for mouradubeux.com.br")
+            return False
+
+    elif 'planc.com.br' in seed_url:
+        if 'empreendimento' in parts and len([p for p in parts if p]) > 1:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for planc.com.br")
+            return False
+
+    elif 'hofmannstation.com.br' in seed_url:
+        if 'imoveis' in parts and len([p for p in parts if p]) > 1:
+            logger.debug(f"Accepting {url} for seed {seed_url}")
+            return True
+        else:
+            logger.debug(f"Discarding {url}: not a specific property path for hofmannstation.com.br")
+            return False
+
     logger.debug(f"Discarding {url}: no matching rules for seed {seed_url}")
     return False
 
@@ -239,12 +264,57 @@ async def discover_urls(browser: Browser, db) -> list[str]:
         for attempt in range(max_retries):
             try:
                 page = await browser.new_page()
+                await stealth_async(page)
                 # Use domcontentloaded for faster loading and avoid waiting for all tracking scripts
                 await page.goto(seed, wait_until="domcontentloaded", timeout=30000)
 
-                # Programmatic scroll and wait
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(3000)
+                # Pagination & Load More Loop
+                max_pages = 10
+                for current_page in range(max_pages):
+                    # Incremental scroll to trigger lazy loading on current view
+                    await page.evaluate("""
+                        async () => {
+                            await new Promise((resolve, reject) => {
+                                let totalHeight = 0;
+                                let distance = window.innerHeight;
+                                let timer = setInterval(() => {
+                                    let scrollHeight = document.body.scrollHeight;
+                                    window.scrollBy(0, distance);
+                                    totalHeight += distance;
+
+                                    if(totalHeight >= scrollHeight - window.innerHeight){
+                                        clearInterval(timer);
+                                        resolve();
+                                    }
+                                }, 300); // Scroll every 300ms
+                            });
+                        }
+                    """)
+                    await page.wait_for_timeout(2000) # Small buffer after scrolling
+
+                    # Try to find and click a "Load More" or "Next Page" button
+                    try:
+                        # Generalized selector for common Brazilian real estate pagination buttons
+                        button = await page.query_selector(
+                            "button:has-text('Carregar mais'), "
+                            "button:has-text('Ver mais'), "
+                            "a:has-text('Carregar mais'), "
+                            "a:has-text('Ver mais'), "
+                            "a:has-text('Próxima'), "
+                            "a:has-text('Próximo'), "
+                            "li.next a, "
+                            ".pagination-next"
+                        )
+                        if button and await button.is_visible():
+                            logger.info(f"Clicking 'Load More' / 'Next' button on {seed}")
+                            await button.click()
+                            await page.wait_for_timeout(3000) # Wait for new content to load
+                        else:
+                            # No visible pagination button found, assume we reached the end
+                            break
+                    except Exception as e:
+                        logger.debug(f"Pagination click failed or not found on {seed}: {e}")
+                        break
 
                 hrefs = await page.evaluate("Array.from(document.querySelectorAll('a')).map(a => a.href)")
 

@@ -9,6 +9,7 @@ from parser import parse_html_to_project
 from pydantic import ValidationError
 from firebase_admin import firestore
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright_stealth import stealth_async
 
 logger = logging.getLogger(__name__)
 
@@ -91,17 +92,35 @@ def process_and_save(html_content: str, url: str, db):
 
 async def extract_html_with_playwright(url: str, browser) -> str:
     page = await browser.new_page()
+    await stealth_async(page)
     try:
         logger.info(f"Navigating to {url}...")
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
-        # Programmatic auto-scroll to the absolute bottom of the page
-        logger.info("Scrolling to the bottom of the page...")
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        # Incremental auto-scroll to ensure lazy loaded content renders
+        logger.info("Scrolling incrementally to the bottom of the page...")
+        await page.evaluate("""
+            async () => {
+                await new Promise((resolve, reject) => {
+                    let totalHeight = 0;
+                    let distance = window.innerHeight;
+                    let timer = setInterval(() => {
+                        let scrollHeight = document.body.scrollHeight;
+                        window.scrollBy(0, distance);
+                        totalHeight += distance;
+
+                        if(totalHeight >= scrollHeight - window.innerHeight){
+                            clearInterval(timer);
+                            resolve();
+                        }
+                    }, 300); // Scroll every 300ms
+                });
+            }
+        """)
 
         # Brief explicit wait after scrolling
         logger.info("Waiting for front-end state updates and animations...")
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(2000)
 
         # Payload Optimization: strip out unnecessary tags
         logger.info("Stripping out unnecessary tags (<script>, <style>, <svg>, <iframe>)...")
