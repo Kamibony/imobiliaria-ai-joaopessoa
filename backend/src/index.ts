@@ -4,6 +4,7 @@ import { onObjectFinalized } from "firebase-functions/v2/storage";
 import * as admin from "firebase-admin";
 import { VertexAI } from "@google-cloud/vertexai";
 import { ProjectSchema, UnitSchema } from "./schema";
+import { Client } from "@googlemaps/google-maps-services-js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -18,6 +19,7 @@ import cors = require("cors");
 admin.initializeApp();
 
 const apiSecret = defineSecret("API_SECRET");
+const mapsKey = defineSecret("GOOGLE_MAPS_API_KEY");
 
 const corsHandler = cors({ origin: true });
 const db = admin.firestore();
@@ -137,6 +139,7 @@ export const askConcierge = onCall({ cors: true, maxInstances: 5 }, async (reque
 
 export const ingestPdf = onObjectFinalized({
   timeoutSeconds: 300,
+  secrets: [mapsKey],
 }, async (event) => {
   const fileBucket = event.data.bucket;
   const filePath = event.data.name;
@@ -426,24 +429,62 @@ export const ingestPdf = onObjectFinalized({
     projectData.needs_geocoding = false;
     if (projectData.location) {
       if (projectData.location.coordinates?.lat == null || projectData.location.coordinates?.lng == null) {
-        projectData.needs_geocoding = true;
-        const fuzzyNeighborhood = projectData.location.neighborhood ? fuzzyMatchNeighborhood(projectData.location.neighborhood) : null;
-
         // Ensure coordinates object exists
         projectData.location.coordinates = { lat: null, lng: null };
 
-        if (fuzzyNeighborhood === 'Cabo Branco') {
-          projectData.location.coordinates.lat = -7.1354;
-          projectData.location.coordinates.lng = -34.8210;
-        } else if (fuzzyNeighborhood === 'Tambau') {
-          projectData.location.coordinates.lat = -7.1165;
-          projectData.location.coordinates.lng = -34.8228;
-        } else if (fuzzyNeighborhood === 'Bessa') {
-          projectData.location.coordinates.lat = -7.0658;
-          projectData.location.coordinates.lng = -34.8322;
-        } else {
-           projectData.location.coordinates.lat = -7.1150;
-           projectData.location.coordinates.lng = -34.8630;
+        let geocoded = false;
+        try {
+          const client = new Client({});
+          const address = `${projectData.name || ''}, ${projectData.location.neighborhood || ''}, João Pessoa, PB`.replace(/^,\s*/, '');
+          console.log(`Geocoding project: ${address}`);
+
+          let apiKey = '';
+          try {
+            apiKey = mapsKey.value();
+          } catch(e) {
+            apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
+          }
+
+          if (apiKey) {
+            const geoRes = await client.geocode({
+              params: {
+                address: address,
+                key: apiKey,
+              }
+            });
+
+            if (geoRes.data.results && geoRes.data.results.length > 0) {
+              const exactLocation = geoRes.data.results[0].geometry.location;
+              projectData.location.coordinates.lat = exactLocation.lat;
+              projectData.location.coordinates.lng = exactLocation.lng;
+              projectData.needs_geocoding = false;
+              geocoded = true;
+              console.log(`Successfully geocoded to lat: ${exactLocation.lat}, lng: ${exactLocation.lng}`);
+            }
+          } else {
+             console.log("No GOOGLE_MAPS_API_KEY available for geocoding.");
+          }
+        } catch (error) {
+          console.error("Geocoding failed:", error);
+        }
+
+        if (!geocoded) {
+          projectData.needs_geocoding = true;
+          const fuzzyNeighborhood = projectData.location.neighborhood ? fuzzyMatchNeighborhood(projectData.location.neighborhood) : null;
+
+          if (fuzzyNeighborhood === 'Cabo Branco') {
+            projectData.location.coordinates.lat = -7.1354;
+            projectData.location.coordinates.lng = -34.8210;
+          } else if (fuzzyNeighborhood === 'Tambau') {
+            projectData.location.coordinates.lat = -7.1165;
+            projectData.location.coordinates.lng = -34.8228;
+          } else if (fuzzyNeighborhood === 'Bessa') {
+            projectData.location.coordinates.lat = -7.0658;
+            projectData.location.coordinates.lng = -34.8322;
+          } else {
+             projectData.location.coordinates.lat = -7.1150;
+             projectData.location.coordinates.lng = -34.8630;
+          }
         }
       }
     }
@@ -644,4 +685,134 @@ export const whatsappWebhook = onRequest({ secrets: [apiSecret] }, (request, res
     }
   }
   });
+});
+
+// Known fallback coordinates from frontend
+const HARDCODED_FALLBACKS = [
+  { lat: -7.1354, lng: -34.8210 }, // Cabo Branco
+  { lat: -7.1165, lng: -34.8228 }, // Tambau
+  { lat: -7.0658, lng: -34.8322 }, // Bessa
+  { lat: -7.1150, lng: -34.8630 }, // General Joao Pessoa
+  { lat: -7.1150, lng: -34.8250 }, // General Joao Pessoa fallback (frontend)
+  { lat: -7.1356, lng: -34.8213 }, // cabo branco frontend
+  { lat: -7.1123, lng: -34.8239 }, // tambau frontend
+  { lat: -7.0658, lng: -34.8329 }, // bessa frontend
+  { lat: -7.0984, lng: -34.8300 }, // manaira frontend
+  { lat: -7.1436, lng: -34.8321 }, // altiplano frontend
+  { lat: -7.0805, lng: -34.8353 }, // jardim oceania frontend
+  { lat: -7.1086, lng: -34.8361 }, // brisamar frontend
+  { lat: -7.1189, lng: -34.8394 }, // miramar frontend
+];
+
+function isFallbackCoordinate(lat: any, lng: any) {
+  if (lat == null || lng == null) return true;
+
+  // Truncate to 4 decimal places for comparison to avoid floating point issues
+  const truncLat = parseFloat(lat).toFixed(4);
+  const truncLng = parseFloat(lng).toFixed(4);
+
+  return HARDCODED_FALLBACKS.some(coord =>
+    parseFloat(coord.lat.toString()).toFixed(4) === truncLat &&
+    parseFloat(coord.lng.toString()).toFixed(4) === truncLng
+  );
+}
+
+export const runGeoMigration = onRequest({ timeoutSeconds: 300, secrets: [mapsKey] }, async (request, response) => {
+  try {
+    console.log('Starting geocoding migration via HTTP function...');
+    const client = new Client({});
+
+    let apiKey = '';
+    try {
+      apiKey = mapsKey.value();
+    } catch (e) {
+      apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
+    }
+
+    if (!apiKey) {
+      response.status(500).json({ error: 'GOOGLE_MAPS_API_KEY is not configured.' });
+      return;
+    }
+
+    const projectsRef = db.collection('projects');
+    const snapshot = await projectsRef.get();
+
+    if (snapshot.empty) {
+      response.status(200).json({ message: 'No projects found in the database.' });
+      return;
+    }
+
+    let updatedCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const coords = data.location?.coordinates || data.coordinates;
+
+      const needsGeocodingFlag = data.needs_geocoding === true;
+      const isFallback = coords ? isFallbackCoordinate(coords.lat, coords.lng) : true;
+
+      if (needsGeocodingFlag || isFallback) {
+        const neighborhood = data.location?.neighborhood || '';
+        const address = `${data.name || ''}, ${neighborhood}, João Pessoa, PB`.replace(/^,\s*/, '');
+
+        console.log(`Geocoding address: ${address}`);
+
+        try {
+          const geoRes = await client.geocode({
+            params: {
+              address: address,
+              key: apiKey,
+            }
+          });
+
+          if (geoRes.data.results && geoRes.data.results.length > 0) {
+            const exactLocation = geoRes.data.results[0].geometry.location;
+
+            // Update document
+            const updateData: any = {
+              needs_geocoding: false,
+            };
+
+            if (data.location) {
+              updateData['location.coordinates'] = {
+                lat: exactLocation.lat,
+                lng: exactLocation.lng
+              };
+            } else {
+              updateData.coordinates = {
+                lat: exactLocation.lat,
+                lng: exactLocation.lng
+              };
+            }
+
+            await doc.ref.update(updateData);
+            updatedCount++;
+          } else {
+            failedCount++;
+          }
+        } catch (error) {
+          console.error(`Error geocoding ${address}:`, error);
+          failedCount++;
+        }
+
+        // Add a small delay to avoid hitting rate limits
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        skippedCount++;
+      }
+    }
+
+    response.status(200).json({
+      total_checked: snapshot.size,
+      updated_count: updatedCount,
+      failed_count: failedCount,
+      skipped_count: skippedCount
+    });
+
+  } catch (error) {
+    console.error('Migration failed:', error);
+    response.status(500).json({ error: 'Migration failed due to internal error.' });
+  }
 });
