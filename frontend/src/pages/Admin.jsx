@@ -855,6 +855,34 @@ function Admin() {
           <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500 text-gray-700 text-sm">
             Catálogo & Mapa: "Visualize e analise todos os imóveis verificados e processados."
           </div>
+          {(() => {
+            const activeProjects = projects.filter(p => p.resolution_state !== 'staged');
+            const total = activeProjects.length;
+            const naPlanta = activeProjects.filter(p => p.status === 'na_planta').length;
+            const emConstrucao = activeProjects.filter(p => p.status === 'em_construcao').length;
+            const prontos = activeProjects.filter(p => p.status === 'pronto').length;
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white rounded-xl shadow border border-gray-200 p-4 flex flex-col items-center justify-center">
+                  <div className="text-sm text-gray-500 font-medium uppercase tracking-wide text-center">Total de Empreendimentos</div>
+                  <div className="text-3xl font-bold text-gray-900 mt-2">{total}</div>
+                </div>
+                <div className="bg-white rounded-xl shadow border border-gray-200 p-4 flex flex-col items-center justify-center">
+                  <div className="text-sm text-gray-500 font-medium uppercase tracking-wide text-center">Na Planta</div>
+                  <div className="text-3xl font-bold text-blue-600 mt-2">{naPlanta}</div>
+                </div>
+                <div className="bg-white rounded-xl shadow border border-gray-200 p-4 flex flex-col items-center justify-center">
+                  <div className="text-sm text-gray-500 font-medium uppercase tracking-wide text-center">Em Construção</div>
+                  <div className="text-3xl font-bold text-yellow-600 mt-2">{emConstrucao}</div>
+                </div>
+                <div className="bg-white rounded-xl shadow border border-gray-200 p-4 flex flex-col items-center justify-center">
+                  <div className="text-sm text-gray-500 font-medium uppercase tracking-wide text-center">Prontos</div>
+                  <div className="text-3xl font-bold text-green-600 mt-2">{prontos}</div>
+                </div>
+              </div>
+            );
+          })()}
           {renderFilterBar()}
           {filteredProjects.length === 0 ? (
             <p>Nenhum imóvel encontrado.</p>
@@ -946,7 +974,7 @@ function Admin() {
           </div>
 
           <h2 className="text-xl font-bold mb-4 mt-8">Analytics: Preço por m² (Média)</h2>
-          <div style={{ height: '300px', width: '100%' }}>
+          <div style={{ height: '300px', minHeight: '300px', width: '100%', minWidth: '100%' }}>
             {(() => {
               const stats = {
                 'Cabo Branco': { sum: 0, count: 0 },
