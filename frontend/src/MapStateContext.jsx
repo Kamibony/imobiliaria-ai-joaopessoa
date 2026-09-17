@@ -18,24 +18,20 @@ export const MapStateProvider = ({ children }) => {
 
       // If the map is already ready, move immediately
       if (mapInstance) {
-        mapInstance.moveCamera({
-          center: { lat: Number(target.lat), lng: Number(target.lng) },
-          zoom: 18,
-          tilt: 45,
-          heading: 20,
-        });
+        mapInstance.panTo({ lat: Number(target.lat), lng: Number(target.lng) });
+        mapInstance.setZoom(18);
+        mapInstance.setTilt(45);
+        mapInstance.setHeading(20);
       }
     }
   }, [mapInstance]);
 
   React.useEffect(() => {
     if (mapInstance && activeCameraTarget) {
-      mapInstance.moveCamera({
-        center: { lat: Number(activeCameraTarget.lat), lng: Number(activeCameraTarget.lng) },
-        zoom: 18,
-        tilt: 45,
-        heading: 20,
-      });
+      mapInstance.panTo({ lat: Number(activeCameraTarget.lat), lng: Number(activeCameraTarget.lng) });
+      mapInstance.setZoom(18);
+      mapInstance.setTilt(45);
+      mapInstance.setHeading(20);
     }
   }, [mapInstance, activeCameraTarget]);
 
