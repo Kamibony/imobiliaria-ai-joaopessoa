@@ -108,10 +108,9 @@ const ProjectCard = ({ project }) => {
 const PublicHome = () => {
   const { language } = useLanguage();
   const [projects, setProjects] = useState([]);
-  const [featuredProject, setFeaturedProject] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const [filterBairro, setFilterBairro] = useState('All');
-  const navigate = useNavigate();
 
   useEffect(() => {
     const projectsRef = collection(db, 'projects');
@@ -122,14 +121,6 @@ const PublicHome = () => {
       })).filter(p => p.resolution_state !== 'staged');
 
       setProjects(projectsData);
-
-      // Prefer projects with actual hero images for the featured spot
-      const featured = projectsData.find(p => p.manual_hero_image_url || (p.assets?.hero_images && p.assets.hero_images.length > 0));
-      if (featured) {
-        setFeaturedProject(featured);
-      } else if (projectsData.length > 0) {
-        setFeaturedProject(projectsData[0]);
-      }
     });
 
     return () => unsubscribe();
@@ -145,59 +136,37 @@ const PublicHome = () => {
 
   return (
     <div className="public-home fade-in" style={{ pointerEvents: 'none' }}>
-      {/* Hero Section */}
-      <div
-        className="hero-section"
+      {/* Top Floating Header */}
+      <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40, padding: '1.5rem', textAlign: 'center', pointerEvents: 'auto', backdropFilter: 'blur(10px)', backgroundColor: 'rgba(17, 17, 17, 0.7)' }}>
+        <h1 style={{ color: 'white', fontSize: '1.5rem', margin: 0, fontFamily: 'var(--font-serif)', letterSpacing: '0.05em' }}>
+          O Exclusivo de João Pessoa
+        </h1>
+      </header>
+
+      {/* Bottom Floating Toggle Button */}
+      <button
+        onClick={() => setIsDrawerOpen(!isDrawerOpen)}
         style={{
-          width: '100vw',
-          height: '80vh',
-          backgroundColor: 'transparent',
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          textAlign: 'center',
-          overflow: 'hidden',
-          marginLeft: 'calc(-50vw + 50%)',
-          marginRight: 'calc(-50vw + 50%)',
-          pointerEvents: 'none'
+          position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', zIndex: 50,
+          pointerEvents: 'auto', borderRadius: '9999px', padding: '0.75rem 2rem',
+          backgroundColor: 'var(--color-black)', color: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: '1rem', border: '1px solid rgba(255,255,255,0.1)'
         }}
       >
-        <div style={{ position: 'relative', zIndex: 2, padding: '2rem', maxWidth: '800px', pointerEvents: 'none' }}>
-          <h1 style={{ color: 'white', marginBottom: '1.5rem', textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
-            O Exclusivo de João Pessoa
-          </h1>
-          <p style={{ fontSize: '1.25rem', fontFamily: 'var(--font-sans)', fontWeight: '300', margin: '0 auto 2.5rem', color: '#e5e7eb', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-            Uma curadoria premium dos melhores lançamentos e oportunidades de investimento imobiliário de alto padrão na região.
-          </p>
-          {featuredProject && (
-            <button
-              onClick={() => navigate(`/projetos/${featuredProject.id}`)}
-              style={{
-                padding: '1rem 2rem',
-                fontSize: '1.1rem',
-                backgroundColor: 'var(--color-accent-gold)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                pointerEvents: 'auto'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-accent-gold)'}
-            >
-              Descobrir {featuredProject.name}
-            </button>
-          )}
-        </div>
-      </div>
+        {isDrawerOpen ? '🗺️ Ver Mapa' : '≡ Ver Lista'}
+      </button>
 
-      <div style={{ padding: '4rem 2rem', maxWidth: '1400px', margin: '0 auto', pointerEvents: 'none' }}>
+      {/* Off-Canvas Drawer */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, height: '100vh', width: '100%', maxWidth: '400px',
+        backgroundColor: 'var(--color-surface)', zIndex: 45,
+        transform: isDrawerOpen ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.3s ease-in-out', overflowY: 'auto', pointerEvents: 'auto',
+        padding: '6rem 1.5rem 2rem', boxShadow: '-4px 0 15px rgba(0,0,0,0.1)'
+      }}>
         {/* Filters */}
-        <div style={{ marginBottom: '3rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', pointerEvents: 'auto' }}>
-          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-sans)', color: 'white' }}>Filtrar por Região:</strong>
+        <div style={{ marginBottom: '2rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-sans)', color: 'var(--color-black)', width: '100%', marginBottom: '0.5rem' }}>Filtrar por Região:</strong>
           {['All', 'Cabo Branco', 'Tambaú', 'Manaíra', 'Bessa'].map(bairro => (
             <button
               key={bairro}
@@ -205,9 +174,9 @@ const PublicHome = () => {
               style={{
                 padding: '0.5rem 1.25rem',
                 borderRadius: '9999px',
-                border: filterBairro === bairro ? '1px solid var(--color-accent-gold)' : '1px solid rgba(255,255,255,0.3)',
-                backgroundColor: filterBairro === bairro ? 'var(--color-accent-gold)' : 'rgba(0,0,0,0.4)',
-                color: 'white',
+                border: filterBairro === bairro ? '1px solid var(--color-accent-gold)' : '1px solid #e5e7eb',
+                backgroundColor: filterBairro === bairro ? 'var(--color-accent-gold)' : 'transparent',
+                color: filterBairro === bairro ? 'white' : 'var(--color-text-main)',
                 fontFamily: 'var(--font-sans)',
                 fontWeight: filterBairro === bairro ? '500' : '400',
                 pointerEvents: 'auto'
@@ -219,15 +188,15 @@ const PublicHome = () => {
         </div>
 
         {/* Unified Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           {filteredProjects.map(project => (
             <ProjectCard key={project.id} project={project} />
           ))}
         </div>
 
         {filteredProjects.length === 0 && (
-          <div style={{ padding: '4rem 0', textAlign: 'center' }}>
-            <p style={{ color: '#e5e7eb', fontSize: '1.1rem' }}>Nenhum projeto encontrado para esta região.</p>
+          <div style={{ padding: '2rem 0', textAlign: 'center' }}>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem' }}>Nenhum projeto encontrado para esta região.</p>
           </div>
         )}
       </div>
