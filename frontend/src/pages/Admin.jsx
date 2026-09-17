@@ -424,6 +424,22 @@ function Admin() {
   const [filterBairro, setFilterBairro] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
 
+  const normalizeStatus = (statusRaw, lang) => {
+    const text = getLocalizedText(statusRaw, lang);
+    if (!text || typeof text !== 'string') return 'unknown';
+    const lower = text.toLowerCase().trim();
+    if (lower.includes('na_planta') || lower.includes('na planta') || lower.includes('lançamento') || lower.includes('lancamento')) {
+      return 'na_planta';
+    }
+    if (lower.includes('em_construcao') || lower.includes('construção') || lower.includes('construcao')) {
+      return 'em_construcao';
+    }
+    if (lower.includes('pronto')) {
+      return 'pronto';
+    }
+    return lower;
+  };
+
   const getStatusColor = (status) => {
     switch(status) {
       case 'na_planta': return '#dc143c'; // Crimson
@@ -465,10 +481,10 @@ function Admin() {
                           (p.location?.neighborhood === 'Tambaú' && filterBairro === 'Tambau') ||
                           (p.location?.neighborhood === 'Tambau' && filterBairro === 'Tambaú');
       const statusMatch = filterStatus === 'All' ||
-                          p.status === filterStatus;
+                          normalizeStatus(p.status, language) === filterStatus;
       return bairroMatch && statusMatch;
     });
-  }, [projects, filterBairro, filterStatus]);
+  }, [projects, filterBairro, filterStatus, language]);
 
   const renderFilterBar = () => (
     <div className="filter-bar">
@@ -858,9 +874,9 @@ function Admin() {
           {(() => {
             const activeProjects = projects.filter(p => p.resolution_state !== 'staged');
             const total = activeProjects.length;
-            const naPlanta = activeProjects.filter(p => p.status === 'na_planta').length;
-            const emConstrucao = activeProjects.filter(p => p.status === 'em_construcao').length;
-            const prontos = activeProjects.filter(p => p.status === 'pronto').length;
+            const naPlanta = activeProjects.filter(p => normalizeStatus(p.status, language) === 'na_planta').length;
+            const emConstrucao = activeProjects.filter(p => normalizeStatus(p.status, language) === 'em_construcao').length;
+            const prontos = activeProjects.filter(p => normalizeStatus(p.status, language) === 'pronto').length;
 
             return (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -957,7 +973,7 @@ function Admin() {
                   <Marker
                     key={project.id}
                     position={[project.location.coordinates.lat, project.location.coordinates.lng]}
-                    icon={createCustomIcon(project.status || 'pronto')}
+                    icon={createCustomIcon(normalizeStatus(project.status, language) || 'pronto')}
                   >
                     <Popup>
                       <strong>{project.name || 'Sem Título'}</strong><br />
