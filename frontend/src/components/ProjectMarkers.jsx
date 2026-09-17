@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AdvancedMarker } from '@vis.gl/react-google-maps';
+import { AdvancedMarker, InfoWindow } from '@vis.gl/react-google-maps';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -52,6 +52,7 @@ const GlowingGoldPin = ({ isActive }) => (
 
 const ProjectMarkers = () => {
   const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -95,13 +96,49 @@ const ProjectMarkers = () => {
             key={project.id}
             position={finalCoords}
             title={project.name}
-            onClick={() => navigate(`/projetos/${project.id}`)}
+            onClick={() => setSelectedProject({ ...project, finalCoords })}
             zIndex={isActive ? 1000 : undefined}
           >
             <GlowingGoldPin isActive={isActive} />
           </AdvancedMarker>
         );
       })}
+
+      {selectedProject && (
+        <InfoWindow
+          position={selectedProject.finalCoords}
+          onCloseClick={() => setSelectedProject(null)}
+          options={{ pixelOffset: new window.google.maps.Size(0, -36) }}
+        >
+          <div style={{ padding: '0.5rem', maxWidth: '200px', fontFamily: 'var(--font-sans)', color: 'var(--color-text-main)' }}>
+            {(selectedProject.manual_hero_image_url || (selectedProject.hero_images && selectedProject.hero_images[0])) && (
+              <img
+                src={selectedProject.manual_hero_image_url || selectedProject.hero_images[0]}
+                alt={selectedProject.name}
+                style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '4px', marginBottom: '0.5rem' }}
+              />
+            )}
+            <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontFamily: 'var(--font-serif)', color: 'var(--color-black)' }}>{selectedProject.name}</h3>
+            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{selectedProject.developer}</p>
+            <button
+              onClick={() => navigate(`/projetos/${selectedProject.id}`)}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                backgroundColor: 'var(--color-accent-gold)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '0.9rem'
+              }}
+            >
+              Ver Detalhes
+            </button>
+          </div>
+        </InfoWindow>
+      )}
     </>
   );
 };

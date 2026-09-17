@@ -83,14 +83,14 @@ const PublicProjectDetail = () => {
   };
 
   return (
-    <div className="public-project-detail fade-in" style={{ pointerEvents: 'none' }}>
+    <div className="public-project-detail fade-in" style={{ backgroundColor: 'var(--color-bg)', minHeight: '100vh', pointerEvents: 'auto' }}>
       {/* Header / Hero Image */}
       <div
         style={{
           width: '100vw',
           minHeight: '70vh',
           backgroundColor: 'transparent',
-          background: project.manual_hero_image_url ? undefined : 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%)',
+          background: project.manual_hero_image_url ? `url(${project.manual_hero_image_url}) center/cover no-repeat` : 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%)',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
@@ -99,12 +99,21 @@ const PublicProjectDetail = () => {
           padding: '4rem 2rem',
           boxSizing: 'border-box',
           marginLeft: 'calc(-50vw + 50%)',
-          marginRight: 'calc(-50vw + 50%)',
-          pointerEvents: 'none'
+          marginRight: 'calc(-50vw + 50%)'
         }}
       >
+        {/* Gradient overlay if hero image exists for better text readability */}
+        {project.manual_hero_image_url && (
+           <div style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%)',
+              zIndex: 1
+           }} />
+        )}
+
         {/* Navbar-ish back button */}
-        <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 10, pointerEvents: 'auto' }}>
+        <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 10 }}>
           <button
             onClick={() => navigate('/')}
             style={{
@@ -151,7 +160,7 @@ const PublicProjectDetail = () => {
         </div>
       </div>
 
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '4rem 2rem', pointerEvents: 'none' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '4rem 2rem' }}>
 
         {/* Layout Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '5rem' }}>
@@ -161,8 +170,7 @@ const PublicProjectDetail = () => {
             backgroundColor: 'var(--color-surface)',
             padding: '3rem',
             borderRadius: '4px',
-            border: '1px solid #e5e7eb',
-            pointerEvents: 'auto'
+            border: '1px solid #e5e7eb'
           }}>
             <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Ficha Técnica</h2>
 
@@ -196,8 +204,7 @@ const PublicProjectDetail = () => {
               backgroundColor: 'var(--color-surface)',
               padding: '3rem',
               borderRadius: '4px',
-              border: '1px solid #e5e7eb',
-              pointerEvents: 'auto'
+              border: '1px solid #e5e7eb'
             }}>
               <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Comodidades</h2>
 
@@ -218,7 +225,7 @@ const PublicProjectDetail = () => {
 
         {/* Smart Canvas Unit Grid */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: '2px solid var(--color-black)', paddingBottom: '1rem', pointerEvents: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: '2px solid var(--color-black)', paddingBottom: '1rem' }}>
             <h2 style={{ fontSize: '2.5rem', margin: 0, fontFamily: 'var(--font-serif)' }}>Smart Canvas</h2>
             <p style={{ color: 'var(--color-text-muted)', margin: 0, fontWeight: '500' }}>{units.length} Unidades Disponíveis</p>
           </div>
@@ -248,8 +255,7 @@ const PublicProjectDetail = () => {
                       flexDirection: 'column',
                       justifyContent: 'center',
                       alignItems: 'center',
-                      transition: 'all 0.3s ease',
-                      pointerEvents: 'auto'
+                      transition: 'all 0.3s ease'
                     }}
                     onMouseEnter={() => setHoveredUnitId(unit.id)}
                     onMouseLeave={() => setHoveredUnitId(null)}
@@ -282,8 +288,7 @@ const PublicProjectDetail = () => {
                         opacity: hoveredUnitId === unit.id ? 1 : 0,
                         transition: 'opacity 0.3s ease-in-out',
                         padding: '2rem',
-                        textAlign: 'center',
-                        pointerEvents: hoveredUnitId === unit.id ? 'auto' : 'none'
+                        textAlign: 'center'
                       }}
                     >
                       <div style={{ fontSize: '2rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-accent-gold)', fontFamily: 'var(--font-serif)' }}>
