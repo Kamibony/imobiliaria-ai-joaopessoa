@@ -113,6 +113,15 @@ const PublicHome = () => {
   const [filterBairro, setFilterBairro] = useState('All');
 
   useEffect(() => {
+    const event = new CustomEvent('catalogDrawerStateChange', { detail: { isDrawerOpen } });
+    window.dispatchEvent(event);
+
+    return () => {
+      window.dispatchEvent(new CustomEvent('catalogDrawerStateChange', { detail: { isDrawerOpen: false } }));
+    };
+  }, [isDrawerOpen]);
+
+  useEffect(() => {
     const projectsRef = collection(db, 'projects');
     const unsubscribe = onSnapshot(projectsRef, (snapshot) => {
       const projectsData = snapshot.docs.map(doc => ({
@@ -147,10 +156,11 @@ const PublicHome = () => {
       <button
         onClick={() => setIsDrawerOpen(!isDrawerOpen)}
         style={{
-          position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', zIndex: 50,
+          position: 'fixed', bottom: '2rem', left: isDrawerOpen ? 'calc(50% - 200px)' : '50%', transform: 'translateX(-50%)', zIndex: 50,
           pointerEvents: 'auto', borderRadius: '9999px', padding: '0.75rem 2rem',
           backgroundColor: 'var(--color-black)', color: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-          fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: '1rem', border: '1px solid rgba(255,255,255,0.1)'
+          fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: '1rem', border: '1px solid rgba(255,255,255,0.1)',
+          transition: 'left 0.3s ease-in-out'
         }}
       >
         {isDrawerOpen ? '🗺️ Ver Mapa' : '≡ Ver Lista'}
