@@ -90,6 +90,7 @@ const PublicProjectDetail = () => {
           width: '100vw',
           minHeight: '70vh',
           backgroundColor: 'transparent',
+          background: project.manual_hero_image_url ? undefined : 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%)',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',

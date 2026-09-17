@@ -42,7 +42,7 @@ const GlowingGoldPin = ({ isActive }) => (
     borderRadius: '50%',
     border: '3px solid var(--color-black)',
     boxShadow: isActive ? '0 0 25px #FFD700' : '0 0 15px var(--color-accent-gold)',
-    cursor: 'pointer',
+    cursor: isActive ? 'default' : 'pointer',
     transition: 'all 0.3s ease',
   }}
   onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
