@@ -150,6 +150,7 @@ const PublicHome = () => {
         <h1 style={{ color: 'white', fontSize: '1.5rem', margin: 0, fontFamily: 'var(--font-serif)', letterSpacing: '0.05em' }}>
           O Exclusivo de João Pessoa
         </h1>
+        <span className="text-sm font-medium text-gray-300">{filteredProjects.length} Empreendimentos Premium</span>
       </header>
 
       {/* Bottom Floating Toggle Button */}
