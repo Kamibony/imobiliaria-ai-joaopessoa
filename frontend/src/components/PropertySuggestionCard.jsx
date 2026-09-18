@@ -76,6 +76,41 @@ const PropertySuggestionCard = ({ slug }) => {
           {project.name}
         </h4>
         <p className="text-sm text-gray-500">{project.developer || 'Construtora não informada'}</p>
+
+        {/* Condensed Summary Metrics */}
+        <div className="mt-2 flex flex-col gap-1 text-xs text-gray-600">
+          <div className="flex items-center gap-1">
+            <span>📐</span>
+            <span>
+              {project.summary?.min_area_m2 && project.summary?.max_area_m2
+                ? `${project.summary.min_area_m2}m² a ${project.summary.max_area_m2}m²`
+                : project.summary?.min_area_m2
+                  ? `A partir de ${project.summary.min_area_m2}m²`
+                  : 'Área: Consulte'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>🛏️</span>
+            <span>
+              {project.summary?.min_bedrooms && project.summary?.max_bedrooms
+                ? project.summary.min_bedrooms === project.summary.max_bedrooms
+                  ? `${project.summary.min_bedrooms} Quartos`
+                  : `${project.summary.min_bedrooms} a ${project.summary.max_bedrooms} Quartos`
+                : project.summary?.min_bedrooms
+                  ? `A partir de ${project.summary.min_bedrooms} Quartos`
+                  : 'Quartos: Consulte'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 font-semibold">
+            <span>💰</span>
+            <span>
+              {project.summary?.min_price_brl
+                ? `A partir de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(project.summary.min_price_brl)}`
+                : 'Preço: Consulte'}
+            </span>
+          </div>
+        </div>
+
         <div className="mt-2 flex gap-2">
            {project.location?.neighborhood && (
             <span className="text-xs px-2 py-1 bg-black text-white rounded-full">

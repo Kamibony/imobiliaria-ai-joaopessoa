@@ -119,7 +119,15 @@ const ProjectMarkers = () => {
               />
             )}
             <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontFamily: 'var(--font-serif)', color: 'var(--color-black)' }}>{selectedProject.name}</h3>
-            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{selectedProject.developer}</p>
+            <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{selectedProject.developer}</p>
+
+            {/* Price Metric */}
+            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', fontWeight: '600', color: 'var(--color-black)' }}>
+              {selectedProject.summary?.min_price_brl
+                ? `A partir de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(selectedProject.summary.min_price_brl)}`
+                : 'Preço: Consulte'}
+            </p>
+
             <button
               onClick={() => navigate(`/projetos/${selectedProject.id}`)}
               style={{
