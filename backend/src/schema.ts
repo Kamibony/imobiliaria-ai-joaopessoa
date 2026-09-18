@@ -55,5 +55,12 @@ export const ProjectSchema = z.object({
   }).nullable().optional(),
   manual_hero_image_url: z.string().nullable().optional(),
   resolution_state: z.enum(['active', 'staged']).nullable().optional(),
+
   possible_matches: z.array(z.string()).nullable().optional(),
+  summary: z.object({
+    min_area_m2: z.number().nullable().optional(),
+    max_area_m2: z.number().nullable().optional(),
+    min_bedrooms: z.number().nullable().optional(),
+    min_price_brl: z.number().nullable().optional(),
+  }).nullable().optional(),
 });

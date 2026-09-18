@@ -34,11 +34,14 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runGeoMigration = exports.whatsappWebhook = exports.ingestPdf = exports.askConcierge = void 0;
+const zod_to_json_schema_1 = require("zod-to-json-schema");
+const zod_1 = require("zod");
+const vertexai_1 = require("@google-cloud/vertexai");
 const params_1 = require("firebase-functions/params");
 const https_1 = require("firebase-functions/v2/https");
 const storage_1 = require("firebase-functions/v2/storage");
 const admin = __importStar(require("firebase-admin"));
-const vertexai_1 = require("@google-cloud/vertexai");
+const vertexai_2 = require("@google-cloud/vertexai");
 const schema_1 = require("./schema");
 const google_maps_services_js_1 = require("@googlemaps/google-maps-services-js");
 const fs = __importStar(require("fs"));
@@ -57,7 +60,7 @@ const db = admin.firestore();
 let vertexAiInstance = null;
 function getVertexAi() {
     if (!vertexAiInstance) {
-        vertexAiInstance = new vertexai_1.VertexAI({ project: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT, location: 'us-central1' });
+        vertexAiInstance = new vertexai_2.VertexAI({ project: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT, location: 'us-central1' });
     }
     return vertexAiInstance;
 }
@@ -239,65 +242,88 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
       Leia este Book e Tabela de Preços imobiliários e extraia os dados do empreendimento e suas unidades.
       O documento é de João Pessoa (bairros como Cabo Branco, Tambaú, Bessa).
 
-      Your Task: Analyze the text, location, and metadata of the uploaded PDF and extract the following real estate data into a strict JSON format.
-
-      Retorne estritamente um JSON contendo o empreendimento e a lista de unidades.
-
-      Formato de saída esperado (JSON object):
-      {
-        "project": {
-          "name": "nome do empreendimento",
-          "developer": "nome da construtora",
-          "delivery_date": "data de entrega ISO 8601 ou null",
-          "status": "na_planta", // Ou "em_construcao", "pronto", ou null
-          "amenities": ["piscina", "academia"], // array de strings
-          "location": {
-            "neighborhood": "Cabo Branco", // Ou "Tambau", ou "Bessa"
-            "position_to_sea": "beira_mar", // Ou "quadra_mar", ou "miolo" ou null
-            "distance_to_beach_meters": 100, // numero ou null
-            "coordinates": {
-              "lat": null,
-              "lng": null
-            }
-          },
-          "ai_context": {
-            "target_persona": {
-              "pt-BR": ["Investidores", "Famílias"],
-              "en": ["Investors", "Families"]
-            },
-            "investment_roi_estimated_percent": 15, // numero ou null
-            "local_advantage": {
-              "pt-BR": "Excelente localização perto da praia.",
-              "en": "Excellent location near the beach."
-            }
-          }
-        },
-        "units": [
-          {
-            "id": "101A", // opcional, numero da unidade
-            "unit_number": "101A",
-            "area_m2": 85.5, // área privativa em m2 (numero) ou null
-            "bedrooms": 3, // numero ou null
-            "sun_orientation": "nascente", // Ou "nascente_sul", "sul", "poente" ou null
-            "snapshots": [
-              {
-                "timestamp": "2024-05-20T12:00:00Z", // data atual
-                "price_brl": 850000, // valor total (numero) ou null
-                "source": "book_pdf"
-              }
-            ]
-          }
-        ]
-      }
+      Your Task: Analyze the text, location, and metadata of the uploaded PDF and extract the following real estate data into the provided structured output format.
 
       Diretrizes:
-      1. Retorne APENAS o JSON puro. Sem formatação markdown (` + "```json" + `).
-      2. Defina os campos numéricos (preço, área, quartos) estritamente como nulo (null) se não encontrar a informação. NUNCA use 0 para dados ausentes.
-      3. Extraia o "empreendimento" para project.name, "construtora" para project.developer.
-      4. Extraia as unidades para units[].area_m2 e units[].snapshots[0].price_brl.
-      5. "source" no snapshot deve ser "${filePath}".
-      6. Se houver descrição de imagens de plantas ou renders para as unidades ou para o empreendimento, tente extrair metadados, embora a imagem real será processada externamente.
+      1. Defina os campos numéricos (preço, área, quartos) estritamente como nulo (null) se não encontrar a informação. NUNCA use 0 para dados ausentes.
+      2. Extraia o "empreendimento" para project.name, "construtora" para project.developer.
+      3. Extraia as unidades para units[].area_m2 e units[].snapshots[0].price_brl.
+      4. "source" no snapshot deve ser "${filePath}".
+      5. Se houver descrição de imagens de plantas ou renders para as unidades ou para o empreendimento, tente extrair metadados, embora a imagem real será processada externamente.
     `;
+        function convertZodJsonSchemaToVertexAiSchema(jsonSchema) {
+            if (!jsonSchema)
+                return { type: vertexai_1.FunctionDeclarationSchemaType.STRING };
+            // zodToJsonSchema uses $ref with definitions or defs sometimes, but if we inline we don't have to resolve.
+            // However, if we do have defs, resolve them.
+            const resolveRef = (ref, defs) => {
+                const defMatch = ref.match(/#\/definitions\/(.*)/) || ref.match(/#\/\$defs\/(.*)/);
+                if (defMatch && defs) {
+                    return defs[defMatch[1]];
+                }
+                return {};
+            };
+            const convertNode = (node, defs) => {
+                let schemaToProcess = node;
+                if (node.$ref) {
+                    schemaToProcess = resolveRef(node.$ref, defs);
+                }
+                // anyOf handling (often generated by zod nullable/optional)
+                if (schemaToProcess.anyOf) {
+                    // Pick the first non-null type if multiple
+                    const nonNullTypes = schemaToProcess.anyOf.filter((t) => t.type !== "null");
+                    if (nonNullTypes.length > 0) {
+                        schemaToProcess = nonNullTypes[0];
+                    }
+                }
+                if (schemaToProcess.type === "object" || (!schemaToProcess.type && schemaToProcess.properties)) {
+                    const properties = {};
+                    for (const [key, value] of Object.entries(schemaToProcess.properties || {})) {
+                        properties[key] = convertNode(value, defs);
+                    }
+                    return {
+                        type: vertexai_1.FunctionDeclarationSchemaType.OBJECT,
+                        properties,
+                        required: schemaToProcess.required,
+                        description: schemaToProcess.description,
+                    };
+                }
+                else if (schemaToProcess.type === "array" || (Array.isArray(schemaToProcess.type) && schemaToProcess.type.includes("array"))) {
+                    return {
+                        type: vertexai_1.FunctionDeclarationSchemaType.ARRAY,
+                        items: convertNode(schemaToProcess.items, defs),
+                        description: schemaToProcess.description,
+                    };
+                }
+                else if (schemaToProcess.type === "string" || (Array.isArray(schemaToProcess.type) && schemaToProcess.type.includes("string"))) {
+                    return {
+                        type: vertexai_1.FunctionDeclarationSchemaType.STRING,
+                        enum: schemaToProcess.enum?.filter((e) => e !== null && e !== ""),
+                        description: schemaToProcess.description,
+                    };
+                }
+                else if (schemaToProcess.type === "number" || (Array.isArray(schemaToProcess.type) && schemaToProcess.type.includes("number")) || schemaToProcess.type === "integer") {
+                    return {
+                        type: vertexai_1.FunctionDeclarationSchemaType.NUMBER,
+                        description: schemaToProcess.description,
+                    };
+                }
+                else if (schemaToProcess.type === "boolean" || (Array.isArray(schemaToProcess.type) && schemaToProcess.type.includes("boolean"))) {
+                    return {
+                        type: vertexai_1.FunctionDeclarationSchemaType.BOOLEAN,
+                        description: schemaToProcess.description,
+                    };
+                }
+                return { type: vertexai_1.FunctionDeclarationSchemaType.STRING };
+            };
+            return convertNode(jsonSchema, jsonSchema.$defs || jsonSchema.definitions);
+        }
+        const FinalZodSchema = zod_1.z.object({
+            project: schema_1.ProjectSchema,
+            units: zod_1.z.array(schema_1.UnitSchema)
+        });
+        const finalJsonSchema = (0, zod_to_json_schema_1.zodToJsonSchema)(FinalZodSchema, { target: "jsonSchema7" });
+        const finalSchema = convertZodJsonSchemaToVertexAiSchema(finalJsonSchema);
         const generativeModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
         const result = await callGeminiWithRetry(generativeModel, {
             contents: [{
@@ -314,6 +340,7 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
                 }],
             generationConfig: {
                 responseMimeType: "application/json",
+                responseSchema: finalSchema,
             },
         });
         const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -556,8 +583,33 @@ exports.ingestPdf = (0, storage_1.onObjectFinalized)({
         }
         if (validUnitsCount > 0) {
             try {
+                // Aggregate min/max from ALL units in db to properly calculate summary
+                const allUnitsSnap = await unitsCollectionRef.get();
+                let min_area = Infinity, max_area = -Infinity, min_beds = Infinity, min_price = Infinity;
+                allUnitsSnap.forEach(docSnap => {
+                    const u = docSnap.data();
+                    if (u.area_m2 != null) {
+                        min_area = Math.min(min_area, u.area_m2);
+                        max_area = Math.max(max_area, u.area_m2);
+                    }
+                    if (u.bedrooms != null) {
+                        min_beds = Math.min(min_beds, u.bedrooms);
+                    }
+                    if (u.latest_snapshot && u.latest_snapshot.price_brl != null) {
+                        min_price = Math.min(min_price, u.latest_snapshot.price_brl);
+                    }
+                });
+                const summary = {};
+                if (min_area !== Infinity)
+                    summary.min_area_m2 = min_area;
+                if (max_area !== -Infinity)
+                    summary.max_area_m2 = max_area;
+                if (min_beds !== Infinity)
+                    summary.min_bedrooms = min_beds;
+                if (min_price !== Infinity)
+                    summary.min_price_brl = min_price;
                 const docRef = db.collection("projects").doc(projectId);
-                await docRef.set({ has_units: true }, { merge: true });
+                await docRef.set({ has_units: true, summary: Object.keys(summary).length > 0 ? summary : null }, { merge: true });
             }
             catch (e) {
                 console.log("Could not update project has_units flag", e);
