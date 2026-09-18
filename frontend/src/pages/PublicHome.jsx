@@ -100,6 +100,40 @@ const ProjectCard = ({ project }) => {
         <p style={{ margin: '0 0 1rem 0', color: 'var(--color-text-muted)', fontSize: '0.95rem' }}>
           {project.developer || 'Construtora não informada'}
         </p>
+
+        {/* Project Summary Metrics */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: 'auto', borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-main)', fontSize: '0.9rem' }}>
+            <span>📐</span>
+            <span>
+              {project.summary?.min_area_m2 && project.summary?.max_area_m2
+                ? `${project.summary.min_area_m2}m² a ${project.summary.max_area_m2}m²`
+                : project.summary?.min_area_m2
+                  ? `A partir de ${project.summary.min_area_m2}m²`
+                  : 'Área: Consulte'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-main)', fontSize: '0.9rem' }}>
+            <span>🛏️</span>
+            <span>
+              {project.summary?.min_bedrooms && project.summary?.max_bedrooms
+                ? project.summary.min_bedrooms === project.summary.max_bedrooms
+                  ? `${project.summary.min_bedrooms} Quartos`
+                  : `${project.summary.min_bedrooms} a ${project.summary.max_bedrooms} Quartos`
+                : project.summary?.min_bedrooms
+                  ? `A partir de ${project.summary.min_bedrooms} Quartos`
+                  : 'Quartos: Consulte'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-main)', fontSize: '0.9rem', fontWeight: '600' }}>
+            <span>💰</span>
+            <span>
+              {project.summary?.min_price_brl
+                ? `A partir de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(project.summary.min_price_brl)}`
+                : 'Preço: Consulte'}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
