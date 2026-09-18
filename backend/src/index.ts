@@ -740,6 +740,39 @@ export const whatsappWebhook = onRequest({ secrets: [apiSecret] }, (request, res
               });
               const replyText = ragResult.response.candidates?.[0]?.content?.parts?.[0]?.text;
               console.log(`Sending WhatsApp reply to ${from}: "${replyText}"`);
+
+              if (replyText) {
+                const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+                const token = process.env.WHATSAPP_API_TOKEN;
+                if (phoneId && token) {
+                  try {
+                    const fetch = require('node-fetch');
+                    const whatsappResponse = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        messaging_product: "whatsapp",
+                        to: from,
+                        type: "text",
+                        text: { body: replyText }
+                      })
+                    });
+
+                    if (!whatsappResponse.ok) {
+                       console.error('Failed to send WhatsApp message', await whatsappResponse.text());
+                    } else {
+                       console.log(`Successfully sent WhatsApp message to ${from}`);
+                    }
+                  } catch (e) {
+                    console.error('Error sending message back to whatsapp', e);
+                  }
+                } else {
+                   console.warn('WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_API_TOKEN is missing');
+                }
+              }
             }
           }
         }

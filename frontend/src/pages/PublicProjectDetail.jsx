@@ -4,6 +4,7 @@ import { doc, getDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useLanguage, getLocalizedText } from '../LanguageContext';
 import { useMapState } from '../MapStateContext';
+import { useConcierge } from '../ConciergeContext';
 import { FaBuilding, FaInfoCircle, FaCalendarAlt, FaMapMarkerAlt } from 'react-icons/fa';
 
 const PublicProjectDetail = () => {
@@ -11,6 +12,7 @@ const PublicProjectDetail = () => {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { flyToProject } = useMapState();
+  const { setIsOpen, setInputValue } = useConcierge();
   const [project, setProject] = useState(null);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -249,7 +251,10 @@ const PublicProjectDetail = () => {
                 As unidades e valores detalhados deste empreendimento estão sob consulta exclusiva.
               </p>
               <button
-                onClick={() => handleWhatsAppContact({ id: 'N/A' }, 'Sob Consulta')}
+                onClick={() => {
+                  setInputValue(`Gostaria de mais informações sobre as unidades do empreendimento ${project?.name || ''}`);
+                  setIsOpen(true);
+                }}
                 style={{
                   backgroundColor: 'var(--color-accent-gold)',
                   color: 'white',

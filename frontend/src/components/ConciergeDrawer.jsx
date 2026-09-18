@@ -1,10 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useConcierge } from '../ConciergeContext';
 import ChatBubble from './ChatBubble';
 
 const ConciergeDrawer = () => {
-  const { isOpen, toggleDrawer, chatHistory, isLoading, sendMessage } = useConcierge();
-  const [inputValue, setInputValue] = useState('');
+  const { isOpen, toggleDrawer, chatHistory, isLoading, sendMessage, inputValue, setInputValue } = useConcierge();
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
