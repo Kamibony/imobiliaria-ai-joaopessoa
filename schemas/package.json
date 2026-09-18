@@ -1,0 +1,17 @@
+{
+  "name": "@app/shared-types",
+  "version": "1.0.0",
+  "description": "Shared JSON Schemas and generated types for the Real Estate AI app",
+  "main": "generated/types.ts",
+  "scripts": {
+    "generate": "npm run generate:ts && npm run generate:zod && npm run generate:py",
+    "generate:ts": "npx json-schema-to-typescript schema.json > generated/types.ts",
+    "generate:zod": "node generate_zod.js",
+    "generate:py": "cd .. && uv run datamodel-codegen --input schemas/schema.json --input-file-type jsonschema --output schemas/generated/models.py --output-model-type pydantic_v2.BaseModel"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "^15.0.0",
+    "json-schema-to-zod": "^2.4.0",
+    "json-refs": "^3.0.15"
+  }
+}
