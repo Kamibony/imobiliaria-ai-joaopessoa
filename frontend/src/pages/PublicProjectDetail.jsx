@@ -4,6 +4,7 @@ import { doc, getDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useLanguage, getLocalizedText } from '../LanguageContext';
 import { useMapState } from '../MapStateContext';
+import { FaBuilding, FaInfoCircle, FaCalendarAlt, FaMapMarkerAlt } from 'react-icons/fa';
 
 const PublicProjectDetail = () => {
   const { id } = useParams();
@@ -83,12 +84,13 @@ const PublicProjectDetail = () => {
   };
 
   return (
-    <div className="public-project-detail fade-in" style={{ backgroundColor: 'var(--color-bg)', minHeight: '100vh', pointerEvents: 'auto' }}>
+    <div className="public-project-detail fade-in" style={{ backgroundColor: 'var(--color-bg)', minHeight: '100vh', pointerEvents: 'auto', maxWidth: '1400px', margin: '0 auto', padding: '2rem' }}>
       {/* Header / Hero Image */}
       <div
         style={{
-          width: '100vw',
-          minHeight: '70vh',
+          width: '100%',
+          height: '350px',
+          borderRadius: '12px',
           backgroundColor: 'transparent',
           background: project.manual_hero_image_url ? `url(${project.manual_hero_image_url}) center/cover no-repeat` : 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%)',
           position: 'relative',
@@ -98,8 +100,7 @@ const PublicProjectDetail = () => {
           color: 'white',
           padding: '4rem 2rem',
           boxSizing: 'border-box',
-          marginLeft: 'calc(-50vw + 50%)',
-          marginRight: 'calc(-50vw + 50%)'
+          overflow: 'hidden'
         }}
       >
         {/* Gradient overlay if hero image exists for better text readability */}
@@ -160,10 +161,10 @@ const PublicProjectDetail = () => {
         </div>
       </div>
 
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '4rem 2rem' }}>
+      <div style={{ paddingTop: '2rem' }}>
 
         {/* Layout Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
 
           {/* General Info Card */}
           <div style={{
@@ -175,22 +176,34 @@ const PublicProjectDetail = () => {
             <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Ficha Técnica</h2>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-              <div>
-                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Construtora</p>
+              <div style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px', border: '1px solid #eaeaea' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <FaBuilding size={16} color="var(--color-accent-gold)" />
+                  <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Construtora</p>
+                </div>
                 <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>{project.developer || 'N/A'}</p>
               </div>
-              <div>
-                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</p>
+              <div style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px', border: '1px solid #eaeaea' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <FaInfoCircle size={16} color="var(--color-accent-gold)" />
+                  <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</p>
+                </div>
                 <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>{getLocalizedText(project.status, language) || 'N/A'}</p>
               </div>
-              <div>
-                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entrega Prevista</p>
+              <div style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px', border: '1px solid #eaeaea' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <FaCalendarAlt size={16} color="var(--color-accent-gold)" />
+                  <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entrega Prevista</p>
+                </div>
                 <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>
                   {project.delivery_date ? new Date(project.delivery_date).toLocaleDateString('pt-BR') : 'N/A'}
                 </p>
               </div>
-              <div>
-                <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Localização</p>
+              <div style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px', border: '1px solid #eaeaea' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <FaMapMarkerAlt size={16} color="var(--color-accent-gold)" />
+                  <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Localização</p>
+                </div>
                 <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', color: 'var(--color-black)' }}>
                   {getLocalizedText(project.location?.neighborhood, language) || 'N/A'}
                 </p>
@@ -231,8 +244,28 @@ const PublicProjectDetail = () => {
           </div>
 
           {units.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--color-surface)', borderRadius: '16px', border: '1px dashed #ccc' }}>
-              <p style={{ fontSize: '1.2rem', color: 'var(--color-text-muted)' }}>Nenhuma unidade catalogada para este empreendimento no momento.</p>
+            <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: '#faf9f6', borderRadius: '8px', border: '1px solid #eaddcf' }}>
+              <p style={{ fontSize: '1.1rem', color: 'var(--color-charcoal)', marginBottom: '2rem' }}>
+                As unidades e valores detalhados deste empreendimento estão sob consulta exclusiva.
+              </p>
+              <button
+                onClick={() => handleWhatsAppContact({ id: 'N/A' }, 'Sob Consulta')}
+                style={{
+                  backgroundColor: 'var(--color-accent-gold)',
+                  color: 'white',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  fontSize: '1rem',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--color-accent-gold-hover)'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = 'var(--color-accent-gold)'}
+              >
+                Solicitar Tabela de Preços ao Concierge
+              </button>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
