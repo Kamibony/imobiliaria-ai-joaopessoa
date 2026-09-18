@@ -50,6 +50,12 @@ export interface Project {
    */
   resolution_state?: "active" | "staged" | null;
   possible_matches?: string[] | null;
+  summary?: {
+    min_area_m2?: number | null;
+    max_area_m2?: number | null;
+    min_bedrooms?: number | null;
+    min_price_brl?: number | null;
+  } | null;
 }
 export interface Coordinates {
   /**

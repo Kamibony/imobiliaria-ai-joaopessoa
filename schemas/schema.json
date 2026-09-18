@@ -8,35 +8,106 @@
       "title": "PropertySnapshot",
       "type": "object",
       "properties": {
-        "timestamp": { "type": "string" },
-        "price_brl": { "type": ["number", "null"] },
-        "price_per_m2_brl": { "type": ["number", "null"] },
-        "source": { "type": "string" }
+        "timestamp": {
+          "type": "string"
+        },
+        "price_brl": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "price_per_m2_brl": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "source": {
+          "type": "string"
+        }
       },
-      "required": ["timestamp", "source"],
+      "required": [
+        "timestamp",
+        "source"
+      ],
       "additionalProperties": false
     },
     "Unit": {
       "title": "Unit",
       "type": "object",
       "properties": {
-        "id": { "type": ["string", "null"] },
-        "unit_number": { "type": ["string", "null"] },
-        "area_m2": { "type": ["number", "null"] },
-        "bedrooms": { "type": ["number", "null"] },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit_number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "area_m2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "bedrooms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "sun_orientation": {
-          "type": ["string", "null"],
-          "enum": ["nascente", "nascente_sul", "sul", "poente", "", null]
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "nascente",
+            "nascente_sul",
+            "sul",
+            "poente",
+            "",
+            null
+          ]
         },
         "snapshots": {
-          "type": ["array", "null"],
-          "items": { "$ref": "#/definitions/PropertySnapshot" }
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PropertySnapshot"
+          }
         },
         "assets": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
-            "floor_plans": { "type": ["array", "null"], "items": { "type": "string" } },
-            "renders": { "type": ["array", "null"], "items": { "type": "string" } }
+            "floor_plans": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "renders": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
           },
           "additionalProperties": false
         }
@@ -48,19 +119,56 @@
       "type": "object",
       "properties": {
         "target_persona": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
-            "pt-BR": { "type": ["array", "null"], "items": { "type": "string" } },
-            "en": { "type": ["array", "null"], "items": { "type": "string" } }
+            "pt-BR": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "en": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
           },
           "additionalProperties": false
         },
-        "investment_roi_estimated_percent": { "type": ["number", "null"] },
+        "investment_roi_estimated_percent": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "local_advantage": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
-            "pt-BR": { "type": ["string", "null"] },
-            "en": { "type": ["string", "null"] }
+            "pt-BR": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "en": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           },
           "additionalProperties": false
         }
@@ -71,8 +179,20 @@
       "title": "Coordinates",
       "type": "object",
       "properties": {
-        "lat": { "type": ["number", "null"], "description": "Latitude" },
-        "lng": { "type": ["number", "null"], "description": "Longitude" }
+        "lat": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Latitude"
+        },
+        "lng": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Longitude"
+        }
       },
       "additionalProperties": false
     },
@@ -80,33 +200,99 @@
       "title": "Project",
       "type": "object",
       "properties": {
-        "id": { "type": ["string", "null"] },
-        "needs_geocoding": { "type": ["boolean", "null"] },
-        "name": { "type": "string", "description": "Nome do empreendimento imobiliário" },
-        "developer": { "type": ["string", "null"], "description": "Nome da construtora responsável" },
-        "delivery_date": { "type": ["string", "null"] },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "needs_geocoding": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Nome do empreendimento imobili\u00e1rio"
+        },
+        "developer": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Nome da construtora respons\u00e1vel"
+        },
+        "delivery_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "status": {
-          "type": ["string", "null"],
-          "enum": ["na_planta", "em_construcao", "pronto", "", null],
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "na_planta",
+            "em_construcao",
+            "pronto",
+            "",
+            null
+          ],
           "description": "Status da obra"
         },
         "amenities": {
-          "type": ["array", "null"],
-          "items": { "type": "string" }
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
         },
         "location": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "neighborhood": {
-              "type": ["string", "null"],
-              "enum": ["Cabo Branco", "Tambau", "Bessa", "Tambaú", null]
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "Cabo Branco",
+                "Tambau",
+                "Bessa",
+                "Tamba\u00fa",
+                null
+              ]
             },
             "position_to_sea": {
-              "type": ["string", "null"],
-              "enum": ["beira_mar", "quadra_mar", "miolo", "", null]
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "beira_mar",
+                "quadra_mar",
+                "miolo",
+                "",
+                null
+              ]
             },
-            "distance_to_beach_meters": { "type": ["number", "null"] },
-            "coordinates": { "$ref": "#/definitions/Coordinates" }
+            "distance_to_beach_meters": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "coordinates": {
+              "$ref": "#/definitions/Coordinates"
+            }
           },
           "additionalProperties": false
         },
@@ -114,37 +300,125 @@
           "$ref": "#/definitions/Coordinates",
           "description": "Coordenadas GPS geocodificadas do projeto (from scraper)"
         },
-        "ai_context": { "$ref": "#/definitions/AiContext", "description": "Contexto de AI do projeto" },
+        "ai_context": {
+          "$ref": "#/definitions/AiContext",
+          "description": "Contexto de AI do projeto"
+        },
         "assets": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
-            "logo": { "type": ["string", "null"] },
-            "hero_images": { "type": ["array", "null"], "items": { "type": "string" } },
-            "brochures": { "type": ["array", "null"], "items": { "type": "string" } }
+            "logo": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hero_images": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "brochures": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
           },
           "additionalProperties": false
         },
-        "manual_hero_image_url": { "type": ["string", "null"], "description": "URL da imagem principal do empreendimento" },
+        "manual_hero_image_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "URL da imagem principal do empreendimento"
+        },
         "resolution_state": {
-          "type": ["string", "null"],
-          "enum": ["active", "staged", null],
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "active",
+            "staged",
+            null
+          ],
           "default": "staged",
-          "description": "Estado de resolução do projeto"
+          "description": "Estado de resolu\u00e7\u00e3o do projeto"
         },
         "possible_matches": {
-          "type": ["array", "null"],
-          "items": { "type": "string" }
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "min_area_m2": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "max_area_m2": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "min_bedrooms": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "min_price_brl": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       },
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "additionalProperties": false
     }
   },
   "properties": {
-    "project": { "$ref": "#/definitions/Project" },
-    "unit": { "$ref": "#/definitions/Unit" },
-    "propertySnapshot": { "$ref": "#/definitions/PropertySnapshot" },
-    "aiContext": { "$ref": "#/definitions/AiContext" }
+    "project": {
+      "$ref": "#/definitions/Project"
+    },
+    "unit": {
+      "$ref": "#/definitions/Unit"
+    },
+    "propertySnapshot": {
+      "$ref": "#/definitions/PropertySnapshot"
+    },
+    "aiContext": {
+      "$ref": "#/definitions/AiContext"
+    }
   },
   "additionalProperties": false
 }

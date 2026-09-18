@@ -2,7 +2,7 @@ import os
 from google import genai
 from google.genai import types
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
-from schemas import ProjectSchema
+from schemas.generated.models import Project as ProjectSchema
 
 class EmptyHTMLError(Exception):
     pass
@@ -21,9 +21,7 @@ def parse_html_to_project(html_content: str) -> ProjectSchema:
         raise EmptyHTMLError("HTML content cannot be empty.")
 
     prompt = f"""
-    Extract real estate project information from the following HTML content.
-    Map the data to the provided schema.
-    If an image URL is not found, leave it as null.
+    Extract real estate project information from the following HTML content using the exact structured output schema provided.
 
     CRITICAL RULES FOR AI GEO-FENCING (STRICT SCOPE):
     You MUST act as a strict geographic gatekeeper.

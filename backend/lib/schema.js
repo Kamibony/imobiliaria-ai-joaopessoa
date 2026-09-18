@@ -56,5 +56,11 @@ exports.ProjectSchema = zod_1.z.object({
     manual_hero_image_url: zod_1.z.string().nullable().optional(),
     resolution_state: zod_1.z.enum(['active', 'staged']).nullable().optional(),
     possible_matches: zod_1.z.array(zod_1.z.string()).nullable().optional(),
+    summary: zod_1.z.object({
+        min_area_m2: zod_1.z.number().nullable().optional(),
+        max_area_m2: zod_1.z.number().nullable().optional(),
+        min_bedrooms: zod_1.z.number().nullable().optional(),
+        min_price_brl: zod_1.z.number().nullable().optional(),
+    }).nullable().optional(),
 });
 //# sourceMappingURL=schema.js.map
