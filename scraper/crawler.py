@@ -66,6 +66,33 @@ def process_and_save(text_content: str, url: str, db):
         # Remove units from parent document to avoid nesting arrays unnecessarily
         units = data_to_save.pop('units', [])
 
+        # Calculate Summary
+        if units:
+            min_area = float('inf')
+            max_area = float('-inf')
+            min_beds = float('inf')
+            min_price = float('inf')
+
+            for unit in units:
+                if unit.get('area_m2') is not None:
+                    min_area = min(min_area, unit['area_m2'])
+                    max_area = max(max_area, unit['area_m2'])
+                if unit.get('bedrooms') is not None:
+                    min_beds = min(min_beds, unit['bedrooms'])
+                if unit.get('snapshots') and len(unit['snapshots']) > 0 and unit['snapshots'][0].get('price_brl') is not None:
+                    min_price = min(min_price, unit['snapshots'][0]['price_brl'])
+
+            summary = {}
+            if min_area != float('inf'): summary['min_area_m2'] = min_area
+            if max_area != float('-inf'): summary['max_area_m2'] = max_area
+            if min_beds != float('inf'): summary['min_bedrooms'] = min_beds
+            if min_price != float('inf'): summary['min_price_brl'] = min_price
+
+            if summary:
+                data_to_save['summary'] = summary
+        else:
+            data_to_save['summary'] = None
+
         # Geocoding Step
         neighborhood = result.location.get('neighborhood', '') if result.location else ''
         if neighborhood:
