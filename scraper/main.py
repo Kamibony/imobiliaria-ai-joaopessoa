@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
