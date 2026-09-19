@@ -47,8 +47,8 @@ def test_parse_valid_html(mocker):
     assert isinstance(result, ProjectSchema)
     assert result.name == "Residencial Brisa do Mar"
     assert result.developer == "Construtora Alliance"
-    assert result.location.neighborhood.value == "Cabo Branco"
-    assert result.status.value == "em_construcao"
+    assert result.location.neighborhood == "Cabo Branco"
+    assert result.status == "em_construcao"
     assert str(result.manual_hero_image_url).rstrip("/") == "https://example.com/brisa.jpg"
     assert (result.resolution_state.value if hasattr(result.resolution_state, "value") else result.resolution_state) == "staged"
     assert result.ai_context is None or result.ai_context.model_dump(by_alias=True) == {"target_persona": {"pt-BR": None, "en": None}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": None, "en": None}}
@@ -64,8 +64,8 @@ def test_parse_html_missing_image(mocker):
     assert isinstance(result, ProjectSchema)
     assert result.name == "Edifício Solar das Águas"
     assert result.developer == "Setai Construtora"
-    assert result.location.neighborhood.value == "Tambaú"
-    assert result.status.value == "na_planta"
+    assert result.location.neighborhood == "Tambaú"
+    assert result.status == "na_planta"
     assert result.manual_hero_image_url is None
     assert (result.resolution_state.value if hasattr(result.resolution_state, "value") else result.resolution_state) == "staged"
     assert result.ai_context is None or result.ai_context.model_dump(by_alias=True) == {"target_persona": {"pt-BR": None, "en": None}, "investment_roi_estimated_percent": None, "local_advantage": {"pt-BR": None, "en": None}}

@@ -26,11 +26,11 @@ export interface Project {
   /**
    * Status da obra
    */
-  status?: "na_planta" | "em_construcao" | "pronto" | "" | null;
+  status?: string | null;
   amenities?: string[] | null;
   location?: {
-    neighborhood?: "Cabo Branco" | "Tambau" | "Bessa" | "Tambaú" | null;
-    position_to_sea?: "beira_mar" | "quadra_mar" | "miolo" | "" | null;
+    neighborhood?: string | null;
+    position_to_sea?: string | null;
     distance_to_beach_meters?: number | null;
     coordinates?: Coordinates;
   } | null;
@@ -101,7 +101,7 @@ export interface Unit {
   unit_number?: string | null;
   area_m2?: number | null;
   bedrooms?: number | null;
-  sun_orientation?: "nascente" | "nascente_sul" | "sul" | "poente" | "" | null;
+  sun_orientation?: string | null;
   snapshots?: PropertySnapshot[] | null;
   assets?: {
     floor_plans?: string[] | null;
