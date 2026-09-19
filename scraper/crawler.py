@@ -5,7 +5,7 @@ import unicodedata
 import asyncio
 import os
 import requests
-from parser import parse_html_to_project
+from parser import parse_html_to_project, parse_catalog_to_projects
 from pydantic import ValidationError
 from firebase_admin import firestore
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -47,89 +47,102 @@ def geocode_address(address: str) -> dict:
         logger.error(f"Error during geocoding for '{address}': {e}")
         return None
 
+def save_project_to_firestore(result, url: str, db):
+    """Helper to save a single project result to Firestore."""
+    import uuid
+
+    logger.info("\n--- Extracted Real Estate Project ---")
+    print(result.model_dump_json(indent=2))
+    logger.info("-------------------------------------")
+
+    if getattr(result, 'status', None) == "OUT_OF_SCOPE":
+        logger.warning(f"Project '{result.name}' discarded due to strict geo-fencing (OUT_OF_SCOPE).")
+        return
+
+    data_to_save = result.model_dump(mode='json', exclude_none=False, by_alias=True)
+
+    # Remove units from parent document to avoid nesting arrays unnecessarily
+    units = data_to_save.pop('units', [])
+
+    # Calculate Summary
+    if units:
+        min_area = float('inf')
+        max_area = float('-inf')
+        min_beds = float('inf')
+        min_price = float('inf')
+
+        for unit in units:
+            if unit.get('area_m2') is not None:
+                min_area = min(min_area, unit['area_m2'])
+                max_area = max(max_area, unit['area_m2'])
+            if unit.get('bedrooms') is not None:
+                min_beds = min(min_beds, unit['bedrooms'])
+            if unit.get('snapshots') and len(unit['snapshots']) > 0 and unit['snapshots'][0].get('price_brl') is not None:
+                min_price = min(min_price, unit['snapshots'][0]['price_brl'])
+
+        summary = {}
+        if min_area != float('inf'):
+            summary['min_area_m2'] = min_area
+        if max_area != float('-inf'):
+            summary['max_area_m2'] = max_area
+        if min_beds != float('inf'):
+            summary['min_bedrooms'] = min_beds
+        if min_price != float('inf'):
+            summary['min_price_brl'] = min_price
+
+        if summary:
+            data_to_save['summary'] = summary
+    else:
+        data_to_save['summary'] = None
+
+    # Geocoding Step
+    neighborhood = result.location.get('neighborhood', '') if result.location else ''
+    if neighborhood:
+        search_query = f"{result.name}, {neighborhood}"
+        coordinates = geocode_address(search_query)
+        if coordinates:
+            data_to_save['coordinates'] = coordinates
+
+    # Ensure routing to Staging
+    data_to_save['resolution_state'] = 'staged'
+    data_to_save['has_units'] = bool(units)
+    data_to_save['source_url'] = url
+
+    # Upsert into Firestore
+    slug = generate_slug(result.name)
+    data_to_save['id'] = slug
+    doc_ref = db.collection('projects').document(slug)
+
+    logger.info(f"Saving to Firestore: collection 'projects', document '{slug}'...")
+    doc_ref.set(data_to_save, merge=True)
+    logger.info(f"Successfully saved project data to Firestore for {url}")
+
+    # Save units to subcollection
+    if units:
+        logger.info(f"Saving {len(units)} units to Firestore subcollection 'projects/{slug}/units'...")
+        batch = db.batch()
+        for unit in units:
+            unit_id = unit.get('id') or str(uuid.uuid4())
+            unit['id'] = unit_id
+            unit_ref = doc_ref.collection('units').document(unit_id)
+            batch.set(unit_ref, unit, merge=True)
+        batch.commit()
+        logger.info(f"Successfully saved units to Firestore for {url}")
+
 def process_and_save(text_content: str, url: str, db):
     """Synchronous parsing and saving to Firestore."""
     try:
-        import uuid
-        result = parse_html_to_project(text_content)
-
-        logger.info("\n--- Extracted Real Estate Project ---")
-        print(result.model_dump_json(indent=2))
-        logger.info("-------------------------------------")
-
-        if getattr(result, 'status', None) == "OUT_OF_SCOPE":
-            logger.warning(f"Project '{result.name}' discarded due to strict geo-fencing (OUT_OF_SCOPE).")
-            return
-
-        data_to_save = result.model_dump(mode='json', exclude_none=False, by_alias=True)
-
-        # Remove units from parent document to avoid nesting arrays unnecessarily
-        units = data_to_save.pop('units', [])
-
-        # Calculate Summary
-        if units:
-            min_area = float('inf')
-            max_area = float('-inf')
-            min_beds = float('inf')
-            min_price = float('inf')
-
-            for unit in units:
-                if unit.get('area_m2') is not None:
-                    min_area = min(min_area, unit['area_m2'])
-                    max_area = max(max_area, unit['area_m2'])
-                if unit.get('bedrooms') is not None:
-                    min_beds = min(min_beds, unit['bedrooms'])
-                if unit.get('snapshots') and len(unit['snapshots']) > 0 and unit['snapshots'][0].get('price_brl') is not None:
-                    min_price = min(min_price, unit['snapshots'][0]['price_brl'])
-
-            summary = {}
-            if min_area != float('inf'):
-                summary['min_area_m2'] = min_area
-            if max_area != float('-inf'):
-                summary['max_area_m2'] = max_area
-            if min_beds != float('inf'):
-                summary['min_bedrooms'] = min_beds
-            if min_price != float('inf'):
-                summary['min_price_brl'] = min_price
-
-            if summary:
-                data_to_save['summary'] = summary
+        if 'apto.vc/br/pb/joao-pessoa' in url:
+            logger.info(f"Catalog Extraction Mode activated for {url}")
+            result_list = parse_catalog_to_projects(text_content)
+            for project_result in result_list.projects:
+                try:
+                    save_project_to_firestore(project_result, url, db)
+                except Exception as inner_e:
+                    logger.error(f"Error saving a project from catalog {url}: {inner_e}")
         else:
-            data_to_save['summary'] = None
-
-        # Geocoding Step
-        neighborhood = result.location.get('neighborhood', '') if result.location else ''
-        if neighborhood:
-            search_query = f"{result.name}, {neighborhood}"
-            coordinates = geocode_address(search_query)
-            if coordinates:
-                data_to_save['coordinates'] = coordinates
-
-        # Ensure routing to Staging
-        data_to_save['resolution_state'] = 'staged'
-        data_to_save['has_units'] = bool(units)
-        data_to_save['source_url'] = url
-
-        # Upsert into Firestore
-        slug = generate_slug(result.name)
-        data_to_save['id'] = slug
-        doc_ref = db.collection('projects').document(slug)
-
-        logger.info(f"Saving to Firestore: collection 'projects', document '{slug}'...")
-        doc_ref.set(data_to_save, merge=True)
-        logger.info(f"Successfully saved project data to Firestore for {url}")
-
-        # Save units to subcollection
-        if units:
-            logger.info(f"Saving {len(units)} units to Firestore subcollection 'projects/{slug}/units'...")
-            batch = db.batch()
-            for unit in units:
-                unit_id = unit.get('id') or str(uuid.uuid4())
-                unit['id'] = unit_id
-                unit_ref = doc_ref.collection('units').document(unit_id)
-                batch.set(unit_ref, unit, merge=True)
-            batch.commit()
-            logger.info(f"Successfully saved units to Firestore for {url}")
+            result = parse_html_to_project(text_content)
+            save_project_to_firestore(result, url, db)
 
     except ValidationError as ve:
         logger.error(f"Pydantic Validation Error during parsing for {url}: {ve}")
