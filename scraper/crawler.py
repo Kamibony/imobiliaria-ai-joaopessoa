@@ -47,10 +47,11 @@ def geocode_address(address: str) -> dict:
         logger.error(f"Error during geocoding for '{address}': {e}")
         return None
 
-def process_and_save(html_content: str, url: str, db):
+def process_and_save(text_content: str, url: str, db):
     """Synchronous parsing and saving to Firestore."""
     try:
-        result = parse_html_to_project(html_content)
+        import uuid
+        result = parse_html_to_project(text_content)
 
         logger.info("\n--- Extracted Real Estate Project ---")
         print(result.model_dump_json(indent=2))
@@ -62,8 +63,11 @@ def process_and_save(html_content: str, url: str, db):
 
         data_to_save = result.model_dump(mode='json', exclude_none=False, by_alias=True)
 
+        # Remove units from parent document to avoid nesting arrays unnecessarily
+        units = data_to_save.pop('units', [])
+
         # Geocoding Step
-        neighborhood = result.location.get('neighborhood', '')
+        neighborhood = result.location.get('neighborhood', '') if result.location else ''
         if neighborhood:
             search_query = f"{result.name}, {neighborhood}"
             coordinates = geocode_address(search_query)
@@ -72,7 +76,8 @@ def process_and_save(html_content: str, url: str, db):
 
         # Ensure routing to Staging
         data_to_save['resolution_state'] = 'staged'
-        data_to_save['has_units'] = False
+        data_to_save['has_units'] = bool(units)
+        data_to_save['source_url'] = url
 
         # Upsert into Firestore
         slug = generate_slug(result.name)
@@ -81,7 +86,19 @@ def process_and_save(html_content: str, url: str, db):
 
         logger.info(f"Saving to Firestore: collection 'projects', document '{slug}'...")
         doc_ref.set(data_to_save, merge=True)
-        logger.info(f"Successfully saved data to Firestore for {url}")
+        logger.info(f"Successfully saved project data to Firestore for {url}")
+
+        # Save units to subcollection
+        if units:
+            logger.info(f"Saving {len(units)} units to Firestore subcollection 'projects/{slug}/units'...")
+            batch = db.batch()
+            for unit in units:
+                unit_id = unit.get('id') or str(uuid.uuid4())
+                unit['id'] = unit_id
+                unit_ref = doc_ref.collection('units').document(unit_id)
+                batch.set(unit_ref, unit, merge=True)
+            batch.commit()
+            logger.info(f"Successfully saved units to Firestore for {url}")
 
     except ValidationError as ve:
         logger.error(f"Pydantic Validation Error during parsing for {url}: {ve}")
