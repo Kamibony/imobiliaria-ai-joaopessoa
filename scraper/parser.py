@@ -28,6 +28,7 @@ def parse_html_to_project(text_content: str) -> ProjectSchema:
     CRITICAL RULES FOR UNIT EXTRACTION:
     Look carefully for price tables, available units, square meters (m²), and bedroom counts. You MUST extract this into the units array so the system can calculate starting prices.
     Each unit should have its `snapshots` field populated with a `PropertySnapshot` object containing the `price_brl` and `timestamp` (current ISO datetime), and `source` (e.g. the developer name or 'scraper').
+    If you cannot find a detailed table of specific units, but the text mentions a starting price (e.g., 'A partir de R$ X') along with an area or bedroom count, you MUST create at least ONE generic unit in the units array representing this baseline offer. Set its unit_number to 'Unidade Base' or 'A partir de', and assign the baseline price and minimum area to it so the system captures the financial starting point.
 
     CRITICAL RULES FOR AI GEO-FENCING (STRICT SCOPE):
     You MUST act as a strict geographic gatekeeper.
