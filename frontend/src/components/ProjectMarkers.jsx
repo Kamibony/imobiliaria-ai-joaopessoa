@@ -41,7 +41,7 @@ const GlowingGoldPin = ({ isActive }) => (
     backgroundColor: isActive ? '#FFD700' : 'var(--color-accent-gold)', // Brighter gold when active
     borderRadius: '50%',
     border: '3px solid var(--color-black)',
-    boxShadow: isActive ? '0 0 25px #FFD700' : '0 0 15px var(--color-accent-gold)',
+    boxShadow: isActive ? '0 0 25px #FFD700, 0 4px 8px rgba(0,0,0,0.6)' : '0 0 15px var(--color-accent-gold), 0 4px 8px rgba(0,0,0,0.6)',
     cursor: isActive ? 'default' : 'pointer',
     transition: 'all 0.3s ease',
   }}
