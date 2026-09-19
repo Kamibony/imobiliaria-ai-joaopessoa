@@ -9,6 +9,7 @@ export const useConcierge = () => useContext(ConciergeContext);
 
 export const ConciergeProvider = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
   const [chatHistory, setChatHistory] = useState([
     { role: 'ai', text: 'Olá! Sou o Concierge Exclusivo de João Pessoa. Posso ajudar você a encontrar o imóvel ideal com base nas suas preferências de estilo de vida e objetivos de investimento. O que você procura hoje?' }
   ]);
@@ -39,7 +40,7 @@ export const ConciergeProvider = ({ children }) => {
   };
 
   return (
-    <ConciergeContext.Provider value={{ isOpen, toggleDrawer, chatHistory, isLoading, sendMessage }}>
+    <ConciergeContext.Provider value={{ isOpen, setIsOpen, inputValue, setInputValue, toggleDrawer, chatHistory, isLoading, sendMessage }}>
       {children}
     </ConciergeContext.Provider>
   );

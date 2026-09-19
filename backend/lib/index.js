@@ -93,37 +93,36 @@ const https_2 = require("firebase-functions/v2/https");
 let catalogCache = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-exports.askConcierge = (0, https_2.onCall)({ cors: true, maxInstances: 5 }, async (request) => {
-    try {
-        const { chatHistory } = request.data;
-        if (!chatHistory || !Array.isArray(chatHistory)) {
-            throw new Error("Invalid chat history");
-        }
-        // Refresh cache if needed
-        const now = Date.now();
-        if (!catalogCache || (now - lastCacheTime > CACHE_TTL_MS)) {
-            const projectsSnapshot = await db.collection("projects").where("resolution_state", "!=", "staged").get();
-            catalogCache = projectsSnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    name: data.name,
-                    location: data.location,
-                    price_range: data.price_range, // May not exist on top level, but included for completeness
-                    roi_badges: data.ai_context?.investment_roi_estimated_percent ? `${data.ai_context.investment_roi_estimated_percent}%` : null,
-                    target_persona: data.ai_context?.target_persona?.["pt-BR"],
-                    local_advantage: data.ai_context?.local_advantage?.["pt-BR"],
-                    status: data.status,
-                    delivery_date: data.delivery_date
-                };
-            });
-            lastCacheTime = now;
-            console.log(`Concierge catalog cache refreshed with ${catalogCache.length} active projects.`);
-        }
-        const systemPrompt = `
+async function getConciergeSystemPrompt() {
+    // Refresh cache if needed
+    const now = Date.now();
+    if (!catalogCache || (now - lastCacheTime > CACHE_TTL_MS)) {
+        const projectsSnapshot = await db.collection("projects").where("resolution_state", "!=", "staged").get();
+        catalogCache = projectsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                name: data.name,
+                location: data.location,
+                neighborhood: data.location?.neighborhood,
+                price_range: data.price_range, // May not exist on top level, but included for completeness
+                min_price: data.summary?.min_price_brl,
+                min_bedrooms: data.summary?.min_bedrooms,
+                roi_badges: data.ai_context?.investment_roi_estimated_percent ? `${data.ai_context.investment_roi_estimated_percent}%` : null,
+                target_persona: data.ai_context?.target_persona?.["pt-BR"],
+                local_advantage: data.ai_context?.local_advantage?.["pt-BR"],
+                status: data.status,
+                delivery_date: data.delivery_date
+            };
+        });
+        lastCacheTime = now;
+        console.log(`Concierge catalog cache refreshed with ${catalogCache.length} active projects.`);
+    }
+    const systemPrompt = `
       You are the elite "O Exclusivo" Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa, etc.).
       You must maintain a highly professional, objective, and premium tone. Do not use overly casual language.
       Focus on ROI for digital nomads and luxury for High-Net-Worth Individuals (UHNWI).
+      You should utilize the structured summaries provided (like minimum price, bedrooms, neighborhood, ROI, local advantages) to give intelligent, hyper-local advice.
 
       You must ONLY recommend properties that are present in the following injected JSON catalog:
       ${JSON.stringify(catalogCache)}
@@ -135,6 +134,15 @@ exports.askConcierge = (0, https_2.onCall)({ cors: true, maxInstances: 5 }, asyn
       If the user is ready to proceed or has high intent, seamlessly guide them to use the "Falar com Corretor" button.
       Keep your responses concise and in Brazilian Portuguese.
     `;
+    return systemPrompt;
+}
+exports.askConcierge = (0, https_2.onCall)({ cors: true, maxInstances: 5 }, async (request) => {
+    try {
+        const { chatHistory } = request.data;
+        if (!chatHistory || !Array.isArray(chatHistory)) {
+            throw new Error("Invalid chat history");
+        }
+        const systemPrompt = await getConciergeSystemPrompt();
         const model = getVertexAi().getGenerativeModel({
             model: "gemini-2.5-flash",
             systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
@@ -691,18 +699,50 @@ exports.whatsappWebhook = (0, https_1.onRequest)({ secrets: [apiSecret] }, (requ
                                 console.log(`WhatsApp INGESTION detected for ${from}`);
                             }
                             else {
-                                const ragPrompt = `
-                You are a helpful Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa).
-                Answer the user's question concisely in Brazilian Portuguese.
-
-                User question: "${text}"
-              `;
-                                const ragModel = getVertexAi().getGenerativeModel({ model: "gemini-2.5-flash" });
+                                const systemPrompt = await getConciergeSystemPrompt();
+                                const ragModel = getVertexAi().getGenerativeModel({
+                                    model: "gemini-2.5-flash",
+                                    systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+                                });
                                 const ragResult = await ragModel.generateContent({
-                                    contents: [{ role: 'user', parts: [{ text: ragPrompt }] }],
+                                    contents: [{ role: 'user', parts: [{ text }] }],
                                 });
                                 const replyText = ragResult.response.candidates?.[0]?.content?.parts?.[0]?.text;
                                 console.log(`Sending WhatsApp reply to ${from}: "${replyText}"`);
+                                if (replyText) {
+                                    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+                                    const token = process.env.WHATSAPP_API_TOKEN;
+                                    if (phoneId && token) {
+                                        try {
+                                            const fetch = require('node-fetch');
+                                            const whatsappResponse = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Authorization': `Bearer ${token}`,
+                                                    'Content-Type': 'application/json'
+                                                },
+                                                body: JSON.stringify({
+                                                    messaging_product: "whatsapp",
+                                                    to: from,
+                                                    type: "text",
+                                                    text: { body: replyText }
+                                                })
+                                            });
+                                            if (!whatsappResponse.ok) {
+                                                console.error('Failed to send WhatsApp message', await whatsappResponse.text());
+                                            }
+                                            else {
+                                                console.log(`Successfully sent WhatsApp message to ${from}`);
+                                            }
+                                        }
+                                        catch (e) {
+                                            console.error('Error sending message back to whatsapp', e);
+                                        }
+                                    }
+                                    else {
+                                        console.warn('WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_API_TOKEN is missing');
+                                    }
+                                }
                             }
                         }
                     }
