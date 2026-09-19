@@ -48,7 +48,7 @@ export interface Project {
   /**
    * Estado de resolução do projeto
    */
-  resolution_state?: "active" | "staged" | null;
+  resolution_state?: string | null;
   possible_matches?: string[] | null;
   summary?: {
     min_area_m2?: number | null;

@@ -320,11 +320,6 @@
             "string",
             "null"
           ],
-          "enum": [
-            "active",
-            "staged",
-            null
-          ],
           "default": "staged",
           "description": "Estado de resolu\u00e7\u00e3o do projeto"
         },
