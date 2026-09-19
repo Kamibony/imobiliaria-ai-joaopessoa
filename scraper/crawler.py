@@ -83,10 +83,14 @@ def process_and_save(text_content: str, url: str, db):
                     min_price = min(min_price, unit['snapshots'][0]['price_brl'])
 
             summary = {}
-            if min_area != float('inf'): summary['min_area_m2'] = min_area
-            if max_area != float('-inf'): summary['max_area_m2'] = max_area
-            if min_beds != float('inf'): summary['min_bedrooms'] = min_beds
-            if min_price != float('inf'): summary['min_price_brl'] = min_price
+            if min_area != float('inf'):
+                summary['min_area_m2'] = min_area
+            if max_area != float('-inf'):
+                summary['max_area_m2'] = max_area
+            if min_beds != float('inf'):
+                summary['min_bedrooms'] = min_beds
+            if min_price != float('inf'):
+                summary['min_price_brl'] = min_price
 
             if summary:
                 data_to_save['summary'] = summary

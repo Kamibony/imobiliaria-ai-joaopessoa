@@ -65,14 +65,6 @@
           "type": [
             "string",
             "null"
-          ],
-          "enum": [
-            "nascente",
-            "nascente_sul",
-            "sul",
-            "poente",
-            "",
-            null
           ]
         },
         "snapshots": {
@@ -234,13 +226,6 @@
             "string",
             "null"
           ],
-          "enum": [
-            "na_planta",
-            "em_construcao",
-            "pronto",
-            "",
-            null
-          ],
           "description": "Status da obra"
         },
         "amenities": {
@@ -262,26 +247,12 @@
               "type": [
                 "string",
                 "null"
-              ],
-              "enum": [
-                "Cabo Branco",
-                "Tambau",
-                "Bessa",
-                "Tamba\u00fa",
-                null
               ]
             },
             "position_to_sea": {
               "type": [
                 "string",
                 "null"
-              ],
-              "enum": [
-                "beira_mar",
-                "quadra_mar",
-                "miolo",
-                "",
-                null
               ]
             },
             "distance_to_beach_meters": {
