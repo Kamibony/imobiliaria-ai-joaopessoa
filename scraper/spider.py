@@ -355,7 +355,12 @@ async def discover_urls(browser: Browser, db) -> list[str]:
         if not doc.exists:
             new_urls.append(url)
         else:
-            logger.info(f"Skipping {url} - already exists in DB as {slug}")
+            data = doc.to_dict() or {}
+            if not data.get('has_units') or not data.get('summary'):
+                logger.info(f"Project {slug} exists but missing units/summary, queuing for re-scrape")
+                new_urls.append(url)
+            else:
+                logger.info(f"Skipping {url} - already exists in DB as {slug}")
 
     logger.info(f"Spider found {len(new_urls)} new URLs to scrape.")
     return new_urls
