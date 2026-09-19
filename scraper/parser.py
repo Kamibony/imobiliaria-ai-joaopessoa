@@ -1,8 +1,14 @@
 import os
 from google import genai
+from typing import List
+from pydantic import BaseModel
+
 from google.genai import types
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from schemas.generated.models import Project as ProjectSchema
+
+class ProjectListSchema(BaseModel):
+    projects: List[ProjectSchema]
 
 class EmptyHTMLError(Exception):
     pass
@@ -72,3 +78,36 @@ def parse_html_to_project(text_content: str) -> ProjectSchema:
     # The new google-genai library with structured output returns JSON string.
     # We can parse it directly with Pydantic.
     return ProjectSchema.model_validate_json(response.text)
+
+@retry(
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    stop=stop_after_attempt(2),
+    retry=retry_if_exception_type(APIError),
+)
+def parse_catalog_to_projects(text_content: str) -> ProjectListSchema:
+    """Parses text content from a catalog page using Gemini to extract multiple real estate projects."""
+
+    if not text_content or text_content.strip() == "":
+        raise EmptyHTMLError("Text content cannot be empty.")
+
+    prompt = f"""
+    You are reading a real estate catalog page containing multiple property cards. Extract EACH project visible on this page into the `projects` array. Ensure you create a generic unit inside each project's `units` array using the starting price ('A partir de R$') and area/bedrooms so the frontend can calculate the summary.
+
+    Text Content:
+    {text_content}
+    """
+
+    client = genai.Client(vertexai=True, location="us-central1")
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ProjectListSchema,
+        ),
+    )
+
+    if not response.text:
+        raise ValueError("Received empty response from Gemini.")
+
+    return ProjectListSchema.model_validate_json(response.text)

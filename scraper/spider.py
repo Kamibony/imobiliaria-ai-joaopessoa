@@ -15,7 +15,7 @@ SEED_URLS = [
     "https://construtorabrascon.com.br/imoveis/",
     "https://abcconstrucoes.com.br/empreendimentos/",
     "https://setaigrupogp.com.br/empreendimentos/",
-    "https://apto.vc/br/pb/joao-pessoa/",
+    "https://apto.vc/br/pb/joao-pessoa",
     "https://ocaconstrutora.com.br/empreendimentos/",
     "https://massai.com.br/empreendimentos",
     "https://ecoconstrucoes.com.br/imoveis/",
@@ -314,18 +314,21 @@ async def discover_urls(browser: Browser, db) -> list[str]:
                         logger.debug(f"Pagination click failed or not found on {seed}: {e}")
                         break
 
-                hrefs = await page.evaluate("Array.from(document.querySelectorAll('a')).map(a => a.href)")
+                if "apto.vc/br/pb/joao-pessoa" in seed:
+                    discovered_urls.add(seed)
+                else:
+                    hrefs = await page.evaluate("Array.from(document.querySelectorAll('a')).map(a => a.href)")
 
-                for href in hrefs:
-                    if not href:
-                        continue
+                    for href in hrefs:
+                        if not href:
+                            continue
 
-                    parsed_href = urlparse(href)
-                    # Reconstruct clean URL without hash or query
-                    clean_url = f"{parsed_href.scheme}://{parsed_href.netloc}{parsed_href.path}"
+                        parsed_href = urlparse(href)
+                        # Reconstruct clean URL without hash or query
+                        clean_url = f"{parsed_href.scheme}://{parsed_href.netloc}{parsed_href.path}"
 
-                    if is_valid_property_link(clean_url, seed):
-                        discovered_urls.add(clean_url)
+                        if is_valid_property_link(clean_url, seed):
+                            discovered_urls.add(clean_url)
 
                 await page.close()
                 break # Success, break out of retry loop
@@ -344,6 +347,11 @@ async def discover_urls(browser: Browser, db) -> list[str]:
     new_urls = []
 
     for url in discovered_urls:
+        if "apto.vc/br/pb/joao-pessoa" in url:
+            # Catalog Mode bypasses document check
+            new_urls.append(url)
+            continue
+
         slug = extract_slug_from_url(url)
         if not slug:
             continue
