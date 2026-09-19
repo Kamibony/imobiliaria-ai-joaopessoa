@@ -2,6 +2,12 @@ name: Scheduled Scraper Pipeline
 
 on:
   workflow_dispatch:
+    inputs:
+      target_missing_units:
+        description: 'Target existing projects missing units/summary'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '0 2 * * 0'
 
@@ -49,7 +55,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Execute Crawler
-        run: uv run main.py
+        run: uv run main.py ${{ github.event.inputs.target_missing_units == 'true' && '--target-missing-units' || '' }}
 
       - name: Generate Run Summary
         if: always()
