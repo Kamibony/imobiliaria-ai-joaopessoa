@@ -11,17 +11,23 @@ from google.genai.errors import APIError
 
 @retry(
     wait=wait_exponential(multiplier=1, min=4, max=10),
-    stop=stop_after_attempt(5),
+    stop=stop_after_attempt(2),
     retry=retry_if_exception_type(APIError), # Retry only on API errors (like 429/503)
 )
-def parse_html_to_project(html_content: str) -> ProjectSchema:
-    """Parses HTML content using Gemini to extract real estate data according to the ProjectSchema schema."""
+def parse_html_to_project(text_content: str) -> ProjectSchema:
+    """Parses text content using Gemini to extract real estate data according to the ProjectSchema schema."""
 
-    if not html_content or html_content.strip() == "":
-        raise EmptyHTMLError("HTML content cannot be empty.")
+    if not text_content or text_content.strip() == "":
+        raise EmptyHTMLError("Text content cannot be empty.")
 
     prompt = f"""
-    Extract real estate project information from the following HTML content using the exact structured output schema provided.
+    Extract real estate project information from the following pure text content using the exact structured output schema provided.
+
+    You are reading pure text (not HTML).
+
+    CRITICAL RULES FOR UNIT EXTRACTION:
+    Look carefully for price tables, available units, square meters (m²), and bedroom counts. You MUST extract this into the units array so the system can calculate starting prices.
+    Each unit should have its `snapshots` field populated with a `PropertySnapshot` object containing the `price_brl` and `timestamp` (current ISO datetime), and `source` (e.g. the developer name or 'scraper').
 
     CRITICAL RULES FOR AI GEO-FENCING (STRICT SCOPE):
     You MUST act as a strict geographic gatekeeper.
@@ -44,8 +50,8 @@ def parse_html_to_project(html_content: str) -> ProjectSchema:
        - Target Persona: ["UHNWI", "Investors"]
        - Local advantage: Highlight extreme exclusivity, vertical living or biofilia, and branded architecture.
 
-    HTML Content:
-    {html_content}
+    Text Content:
+    {text_content}
     """
 
     client = genai.Client(vertexai=True, location="us-central1")

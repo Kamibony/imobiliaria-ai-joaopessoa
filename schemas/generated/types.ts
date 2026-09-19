@@ -56,6 +56,8 @@ export interface Project {
     min_bedrooms?: number | null;
     min_price_brl?: number | null;
   } | null;
+  units?: Unit[] | null;
+  source_url?: string | null;
 }
 export interface Coordinates {
   /**

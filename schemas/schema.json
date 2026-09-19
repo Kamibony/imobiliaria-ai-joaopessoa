@@ -398,6 +398,21 @@
             }
           },
           "additionalProperties": false
+        },
+        "units": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Unit"
+          }
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
