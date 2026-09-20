@@ -143,9 +143,18 @@ def save_project_to_firestore(result, url: str, db):
             existing_resolution_state = query_ref[0].to_dict().get('resolution_state')
             slug = existing_doc_ref.id  # Use the existing ID
 
+    critical_missing = False
+    if not result.name or not str(result.name).strip():
+        critical_missing = True
+    if not neighborhood or not str(neighborhood).strip():
+        critical_missing = True
+
     if existing_doc_ref is not None:
         doc_ref = existing_doc_ref
-        data_to_save['resolution_state'] = existing_resolution_state if existing_resolution_state else 'staged'
+        if critical_missing:
+            data_to_save['resolution_state'] = 'staged'
+        else:
+            data_to_save['resolution_state'] = existing_resolution_state if existing_resolution_state else 'staged'
     else:
         doc_ref = doc_ref_by_slug
         data_to_save['resolution_state'] = 'staged'

@@ -23,7 +23,7 @@ const getFallbackCoordinates = (neighborhood) => {
   let baseCoords = defaultCoords;
 
   if (neighborhood) {
-    const normalized = neighborhood.toLowerCase();
+    const normalized = (neighborhood || '').toString().toLowerCase();
     // Find exact or partial match
     const match = Object.keys(NEIGHBORHOOD_COORDS).find(k => normalized.includes(k));
     if (match) {

@@ -173,7 +173,7 @@ const PublicHome = () => {
     return projects.filter(p => {
       if (filterBairro === 'All') return true;
       const neighborhood = getLocalizedText(p.location?.neighborhood, language);
-      return neighborhood && neighborhood.toLowerCase() === filterBairro.toLowerCase();
+      return neighborhood && (neighborhood || '').toString().toLowerCase() === (filterBairro || '').toString().toLowerCase();
     });
   }, [projects, filterBairro, language]);
 
