@@ -147,18 +147,49 @@ def save_project_to_firestore(result, url: str, db):
 
 def process_and_save(text_content: str, url: str, db):
     """Synchronous parsing and saving to Firestore."""
+    from datetime import datetime, timezone
+
+    def enrich_project(proj):
+        # Filter out projects lacking a name
+        if not proj.name or not proj.name.strip():
+            return None
+
+        # Enforce ID generation explicitly in Python
+        proj.id = generate_slug(proj.name)
+
+        # Enforce resolution_state
+        proj.resolution_state = "staged"
+
+        # Enforce timestamps on units
+        if proj.units:
+            now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            for unit in proj.units:
+                if unit.snapshots:
+                    for snapshot in unit.snapshots:
+                        snapshot.timestamp = now_iso
+
+        return proj
+
     try:
         if 'apto.vc/br/pb/joao-pessoa' in url:
             logger.info(f"Catalog Extraction Mode activated for {url}")
             result_list = parse_catalog_to_projects(text_content)
             for project_result in result_list.projects:
+                enriched = enrich_project(project_result)
+                if enriched is None:
+                    logger.warning("Skipping project due to missing or empty name.")
+                    continue
                 try:
-                    save_project_to_firestore(project_result, url, db)
+                    save_project_to_firestore(enriched, url, db)
                 except Exception as inner_e:
                     logger.error(f"Error saving a project from catalog {url}: {inner_e}")
         else:
             result = parse_html_to_project(text_content)
-            save_project_to_firestore(result, url, db)
+            enriched = enrich_project(result)
+            if enriched is not None:
+                save_project_to_firestore(enriched, url, db)
+            else:
+                logger.warning("Skipping parsed single project due to missing or empty name.")
 
     except ValidationError as ve:
         logger.error(f"Pydantic Validation Error during parsing for {url}: {ve}")
@@ -166,7 +197,7 @@ def process_and_save(text_content: str, url: str, db):
         logger.error(f"Error during AI parsing for {url}: {e}")
 
 
-async def extract_html_with_playwright(url: str, browser) -> str:
+async def extract_html_with_playwright(url: str, browser) -> list[str]:
     page = await browser.new_page()
     try:
         logger.info(f"Navigating to {url}...")
@@ -197,19 +228,46 @@ async def extract_html_with_playwright(url: str, browser) -> str:
         logger.info("Waiting for front-end state updates and animations...")
         await page.wait_for_timeout(2000)
 
-        # Payload Optimization: strip out unnecessary tags
-        logger.info("Stripping out unnecessary tags (<script>, <style>, <svg>, <iframe>)...")
-        await page.evaluate("""
-            const tagsToRemove = ['script', 'style', 'svg', 'iframe'];
-            tagsToRemove.forEach(tag => {
-                const elements = document.querySelectorAll(tag);
-                elements.forEach(el => el.remove());
-            });
-        """)
+        if 'apto.vc/br/pb/joao-pessoa' in url:
+            logger.info("Catalog mode detected. Extracting property cards...")
+            cards = await page.evaluate("""
+                () => {
+                    let results = [];
+                    let elements = document.querySelectorAll('*');
+                    for (let el of elements) {
+                        if (el.innerText && el.innerText.includes('Venda a partir de') && el.innerText.length > 50 && el.innerText.length < 500) {
+                            let hasMatchingChild = false;
+                            for (let child of el.children) {
+                                if (child.innerText && child.innerText.includes('Venda a partir de') && child.innerText.length > 50 && child.innerText.length < 500) {
+                                    hasMatchingChild = true;
+                                    break;
+                                }
+                            }
+                            if (!hasMatchingChild) {
+                                results.push(el.innerText.trim());
+                            }
+                        }
+                    }
+                    // Deduplicate
+                    return Array.from(new Set(results));
+                }
+            """)
+            logger.info(f"Successfully extracted {len(cards)} property cards.")
+            return cards
+        else:
+            # Payload Optimization: strip out unnecessary tags
+            logger.info("Stripping out unnecessary tags (<script>, <style>, <svg>, <iframe>)...")
+            await page.evaluate("""
+                const tagsToRemove = ['script', 'style', 'svg', 'iframe'];
+                tagsToRemove.forEach(tag => {
+                    const elements = document.querySelectorAll(tag);
+                    elements.forEach(el => el.remove());
+                });
+            """)
 
-        html_content = await page.content()
-        logger.info("Successfully extracted HTML content.")
-        return html_content
+            html_content = await page.content()
+            logger.info("Successfully extracted HTML content.")
+            return [html_content]
     finally:
         await page.close()
 
@@ -229,9 +287,21 @@ async def fetch_url(url: str, browser, db, semaphore: asyncio.Semaphore, job_ref
             return await extract_html_with_playwright(url, browser)
 
         try:
-            html_content = await fetch_with_retry()
-            logger.info("Sending extracted HTML to Gemini for parsing and saving...")
-            await asyncio.to_thread(process_and_save, html_content, url, db)
+            extracted_texts = await fetch_with_retry()
+            logger.info("Sending extracted content to Gemini for parsing and saving...")
+
+            if 'apto.vc/br/pb/joao-pessoa' in url:
+                # Chunking logic for catalog extraction
+                chunk_size = 5
+                for i in range(0, len(extracted_texts), chunk_size):
+                    chunk = extracted_texts[i:i+chunk_size]
+                    logger.info(f"Processing catalog chunk {i//chunk_size + 1} of {(len(extracted_texts) - 1)//chunk_size + 1}")
+                    chunk_text = "\n\n---\n\n".join(chunk)
+                    await asyncio.to_thread(process_and_save, chunk_text, url, db)
+            else:
+                # Normal single project extraction
+                if extracted_texts:
+                    await asyncio.to_thread(process_and_save, extracted_texts[0], url, db)
 
             if job_ref:
                 job_ref.set({"metrics": {"urls_processed": firestore.Increment(1)}}, merge=True)
