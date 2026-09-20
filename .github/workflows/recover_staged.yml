@@ -1,25 +1,16 @@
-name: Scheduled Scraper Pipeline
+name: Recover Staged Projects Pipeline
 
 on:
   workflow_dispatch:
-    inputs:
-      target_missing_units:
-        description: 'Target existing projects missing units/summary'
-        required: false
-        type: boolean
-        default: false
-  # VYPNUTE AUTOMATICKE SPUSTANIE KVOLI KONTROLE NAKLADOV
-  # schedule:
-  #   - cron: '0 2 * * 0'
 
 concurrency:
   group: scraper
   cancel-in-progress: false
 
 jobs:
-  run-scraper:
+  run-recovery:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -42,9 +33,6 @@ jobs:
       - name: Install Dependencies
         run: uv sync
 
-      - name: Install Playwright Browsers
-        run: uv run playwright install chromium --with-deps
-
       - id: 'auth'
         name: Authenticate to Google Cloud
         uses: 'google-github-actions/auth@v2'
@@ -55,11 +43,5 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Execute Crawler
-        env:
-          GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-        run: uv run main.py ${{ github.event.inputs.target_missing_units == 'true' && '--target-missing-units' || '' }}
-
-      - name: Generate Run Summary
-        if: always()
-        run: uv run summary_generator.py
+      - name: Execute Recovery Script
+        run: uv run recover_staged_projects.py
