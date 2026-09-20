@@ -119,15 +119,38 @@ def save_project_to_firestore(result, url: str, db):
                 data_to_save['is_approximate_location'] = False
             break
 
-    # Ensure routing to Staging
-    data_to_save['resolution_state'] = 'staged'
     data_to_save['has_units'] = bool(units)
     data_to_save['source_url'] = url
 
-    # Upsert into Firestore
     slug = generate_slug(result.name)
+
+    # Check if document already exists to preserve resolution_state
+    existing_doc_ref = None
+    existing_resolution_state = None
+
+    # Check by slug
+    doc_ref_by_slug = db.collection('projects').document(slug)
+    doc_snapshot = doc_ref_by_slug.get()
+
+    if doc_snapshot.exists:
+        existing_doc_ref = doc_ref_by_slug
+        existing_resolution_state = doc_snapshot.to_dict().get('resolution_state')
+    else:
+        # Check by source_url
+        query_ref = db.collection('projects').where('source_url', '==', url).limit(1).get()
+        if query_ref:
+            existing_doc_ref = query_ref[0].reference
+            existing_resolution_state = query_ref[0].to_dict().get('resolution_state')
+            slug = existing_doc_ref.id  # Use the existing ID
+
+    if existing_doc_ref is not None:
+        doc_ref = existing_doc_ref
+        data_to_save['resolution_state'] = existing_resolution_state if existing_resolution_state else 'staged'
+    else:
+        doc_ref = doc_ref_by_slug
+        data_to_save['resolution_state'] = 'staged'
+
     data_to_save['id'] = slug
-    doc_ref = db.collection('projects').document(slug)
 
     logger.info(f"Saving to Firestore: collection 'projects', document '{slug}'...")
     doc_ref.set(data_to_save, merge=True)
@@ -156,9 +179,6 @@ def process_and_save(text_content: str, url: str, db):
 
         # Enforce ID generation explicitly in Python
         proj.id = generate_slug(proj.name)
-
-        # Enforce resolution_state
-        proj.resolution_state = "staged"
 
         # Enforce timestamps on units
         if proj.units:
