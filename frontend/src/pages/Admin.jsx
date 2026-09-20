@@ -427,7 +427,7 @@ function Admin() {
   const normalizeStatus = (statusRaw, lang) => {
     const text = getLocalizedText(statusRaw, lang);
     if (!text || typeof text !== 'string') return 'unknown';
-    const lower = text.toLowerCase().trim();
+    const lower = (text || '').toString().toLowerCase().trim();
     if (lower.includes('na_planta') || lower.includes('na planta') || lower.includes('lançamento') || lower.includes('lancamento')) {
       return 'na_planta';
     }
