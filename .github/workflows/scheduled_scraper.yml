@@ -8,8 +8,9 @@ on:
         required: false
         type: boolean
         default: false
-  schedule:
-    - cron: '0 2 * * 0'
+  # VYPNUTE AUTOMATICKE SPUSTANIE KVOLI KONTROLE NAKLADOV
+  # schedule:
+  #   - cron: '0 2 * * 0'
 
 concurrency:
   group: scraper
