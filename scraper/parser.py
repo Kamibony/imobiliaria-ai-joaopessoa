@@ -31,6 +31,9 @@ def parse_html_to_project(text_content: str) -> ProjectSchema:
 
     You are reading pure text (not HTML).
 
+    CRITICAL RULES FOR ADDRESS AND LOCATION EXTRACTION:
+    You MUST extract the exact street address into the `location.address` field if it is available in the source text.
+
     CRITICAL RULES FOR UNIT EXTRACTION:
     Look carefully for price tables, available units, square meters (m²), and bedroom counts. You MUST extract this into the units array so the system can calculate starting prices.
     Each unit should have its `snapshots` field populated with a `PropertySnapshot` object containing the `price_brl` and `timestamp` (current ISO datetime), and `source` (e.g. the developer name or 'scraper').
@@ -92,6 +95,9 @@ def parse_catalog_to_projects(text_content: str) -> ProjectListSchema:
 
     prompt = f"""
     You are reading a real estate catalog page containing multiple property cards. Extract EACH project visible on this page into the `projects` array. Ensure you create a generic unit inside each project's `units` array using the starting price ('A partir de R$') and area/bedrooms so the frontend can calculate the summary.
+
+    CRITICAL RULES FOR ADDRESS EXTRACTION:
+    You MUST extract the exact street address into the `location.address` field for each project if it is available in the source text.
 
     Text Content:
     {text_content}
