@@ -96,12 +96,28 @@ def save_project_to_firestore(result, url: str, db):
         data_to_save['summary'] = None
 
     # Geocoding Step
-    neighborhood = result.location.get('neighborhood', '') if result.location else ''
+    neighborhood = result.location.neighborhood if result.location and getattr(result.location, 'neighborhood', None) else ''
+    address = result.location.address if result.location and getattr(result.location, 'address', None) else ''
+
+    queries_to_try = []
+    if address and neighborhood:
+        queries_to_try.append(f"{result.name}, {address}, {neighborhood}, João Pessoa, PB")
+        queries_to_try.append(f"{address}, {neighborhood}, João Pessoa, PB")
+    elif neighborhood:
+        queries_to_try.append(f"{result.name}, {neighborhood}, João Pessoa, PB")
+
     if neighborhood:
-        search_query = f"{result.name}, {neighborhood}"
-        coordinates = geocode_address(search_query)
+        queries_to_try.append(f"{neighborhood}, João Pessoa, PB")
+
+    for i, query in enumerate(queries_to_try):
+        coordinates = geocode_address(query)
         if coordinates:
             data_to_save['coordinates'] = coordinates
+            if query == f"{neighborhood}, João Pessoa, PB":
+                data_to_save['is_approximate_location'] = True
+            else:
+                data_to_save['is_approximate_location'] = False
+            break
 
     # Ensure routing to Staging
     data_to_save['resolution_state'] = 'staged'
