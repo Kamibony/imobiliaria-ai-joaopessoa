@@ -57,7 +57,7 @@ jobs:
 
       - name: Execute Crawler
         env:
-          GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_GEOCODING_API_KEY }}
         run: uv run main.py ${{ github.event.inputs.target_missing_units == 'true' && '--target-missing-units' || '' }}
 
       - name: Generate Run Summary
