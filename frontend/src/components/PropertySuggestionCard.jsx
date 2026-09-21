@@ -101,6 +101,22 @@ const PropertySuggestionCard = ({ slug }) => {
                   : 'Quartos: Consulte'}
             </span>
           </div>
+          <div className="flex items-center gap-1">
+            <span>🚿</span>
+            <span>
+              {project.summary?.min_bathrooms
+                ? `A partir de ${project.summary.min_bathrooms} Banheiros`
+                : 'Banheiros: Consulte'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>🚗</span>
+            <span>
+              {project.summary?.min_parking_spots
+                ? `A partir de ${project.summary.min_parking_spots} Vagas`
+                : 'Vagas: Consulte'}
+            </span>
+          </div>
           <div className="flex items-center gap-1 font-semibold">
             <span>💰</span>
             <span>

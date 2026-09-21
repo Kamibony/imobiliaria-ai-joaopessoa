@@ -368,6 +368,18 @@
                 "null"
               ]
             },
+            "min_bathrooms": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "min_parking_spots": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "min_price_brl": {
               "type": [
                 "number",

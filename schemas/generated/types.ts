@@ -54,6 +54,8 @@ export interface Project {
     min_area_m2?: number | null;
     max_area_m2?: number | null;
     min_bedrooms?: number | null;
+    min_bathrooms?: number | null;
+    min_parking_spots?: number | null;
     min_price_brl?: number | null;
   } | null;
   units?: Unit[] | null;
