@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { useLanguage, getLocalizedText } from '../LanguageContext';
 import { useMapState } from '../MapStateContext';
 import { useConcierge } from '../ConciergeContext';
-import { FaBuilding, FaInfoCircle, FaCalendarAlt, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaBuilding, FaInfoCircle, FaCalendarAlt, FaMapMarkerAlt, FaCheck, FaChartLine } from 'react-icons/fa';
 
 const PublicProjectDetail = () => {
   const { id } = useParams();
@@ -223,16 +223,62 @@ const PublicProjectDetail = () => {
             }}>
               <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Comodidades</h2>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                 {project.amenities.map((amenity, index) => (
                   <div key={index} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    backgroundColor: '#f9fafb',
+                    padding: '0.75rem 1.25rem',
+                    borderRadius: '9999px',
+                    border: '1px solid #eaeaea',
                     color: 'var(--color-charcoal)',
-                    fontSize: '1rem',
-                    fontWeight: '400',
+                    fontSize: '0.95rem',
+                    fontWeight: '500',
                   }}>
+                    <FaCheck size={14} color="var(--color-accent-gold)" />
                     {amenity}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Highlights & Investment Card */}
+          {(project.local_advantage || project.investment_roi_estimated_percent != null) && (
+            <div style={{
+              backgroundColor: 'var(--color-surface)',
+              padding: '3rem',
+              borderRadius: '4px',
+              border: '1px solid #e5e7eb'
+            }}>
+              <h2 style={{ fontSize: '2rem', marginBottom: '2rem', borderBottom: '1px solid #eaeaea', paddingBottom: '1rem', fontFamily: 'var(--font-serif)' }}>Destaques e Investimento</h2>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                {project.local_advantage && getLocalizedText(project.local_advantage, language) && (
+                  <div>
+                    <h3 style={{ fontSize: '1.2rem', color: 'var(--color-black)', marginBottom: '0.75rem', fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <FaMapMarkerAlt size={16} color="var(--color-accent-gold)" />
+                      Vantagem Local
+                    </h3>
+                    <p style={{ color: 'var(--color-charcoal)', lineHeight: '1.6', margin: 0 }}>
+                      {getLocalizedText(project.local_advantage, language)}
+                    </p>
+                  </div>
+                )}
+
+                {project.investment_roi_estimated_percent != null && (
+                  <div>
+                    <h3 style={{ fontSize: '1.2rem', color: 'var(--color-black)', marginBottom: '0.75rem', fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <FaChartLine size={16} color="var(--color-accent-gold)" />
+                      ROI Estimado
+                    </h3>
+                    <p style={{ color: 'var(--color-charcoal)', lineHeight: '1.6', margin: 0, fontSize: '1.5rem', fontWeight: '600' }}>
+                      {project.investment_roi_estimated_percent}%
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
