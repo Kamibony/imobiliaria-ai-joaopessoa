@@ -27,6 +27,8 @@ export interface Property {
     area_m2: number | null;
     sun_orientation: 'nascente' | 'nascente_sul' | 'sul' | 'poente';
     bedrooms: number | null;
+    bathrooms?: number | null;
+    parking_spots?: number | null;
   };
   snapshots: PropertySnapshot[];
   ai_context: {

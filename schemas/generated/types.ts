@@ -101,6 +101,8 @@ export interface Unit {
   unit_number?: string | null;
   area_m2?: number | null;
   bedrooms?: number | null;
+  bathrooms?: number | null;
+  parking_spots?: number | null;
   sun_orientation?: string | null;
   snapshots?: PropertySnapshot[] | null;
   assets?: {

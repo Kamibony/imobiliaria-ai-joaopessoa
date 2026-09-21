@@ -61,6 +61,18 @@
             "null"
           ]
         },
+        "bathrooms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "parking_spots": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "sun_orientation": {
           "type": [
             "string",

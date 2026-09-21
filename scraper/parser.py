@@ -35,9 +35,9 @@ def parse_html_to_project(text_content: str) -> ProjectSchema:
     You MUST extract the exact street address into the `location.address` field if it is available in the source text.
 
     CRITICAL RULES FOR UNIT EXTRACTION:
-    Look carefully for price tables, available units, square meters (m²), and bedroom counts. You MUST extract this into the units array so the system can calculate starting prices.
+    Look carefully for price tables, available units, square meters (m²), bedroom counts, bathrooms (banheiros), and parking spots (vagas). You MUST extract this into the units array so the system can calculate starting prices. Be sure to map "banheiros" to `bathrooms` and "vagas" to `parking_spots`.
     Each unit should have its `snapshots` field populated with a `PropertySnapshot` object containing the `price_brl` and `timestamp` (current ISO datetime), and `source` (e.g. the developer name or 'scraper').
-    If you cannot find a detailed table of specific units, but the text mentions a starting price (e.g., 'A partir de R$ X') along with an area or bedroom count, you MUST create at least ONE generic unit in the units array representing this baseline offer. Set its unit_number to 'Unidade Base' or 'A partir de', and assign the baseline price and minimum area to it so the system captures the financial starting point.
+    If you cannot find a detailed table of specific units, but the text mentions a starting price (e.g., 'A partir de R$ X') along with an area, bedroom count, bathrooms, or parking spots, you MUST create at least ONE generic unit in the units array representing this baseline offer. Set its unit_number to 'Unidade Base' or 'A partir de', and assign the baseline price, minimum area, and any available bathroom/parking info to it so the system captures the financial starting point.
 
     CRITICAL RULES FOR AI GEO-FENCING (STRICT SCOPE):
     You MUST act as a strict geographic gatekeeper.
@@ -98,6 +98,9 @@ def parse_catalog_to_projects(text_content: str) -> ProjectListSchema:
 
     CRITICAL RULES FOR ADDRESS EXTRACTION:
     You MUST extract the exact street address into the `location.address` field for each project if it is available in the source text.
+
+    CRITICAL RULES FOR UNIT EXTRACTION:
+    You MUST explicitly look for the number of bathrooms ("banheiros") and parking spots ("vagas" ou "vagas de estacionamento") for each unit/property and map them to the `bathrooms` and `parking_spots` fields within the `units` array objects.
 
     Text Content:
     {text_content}
