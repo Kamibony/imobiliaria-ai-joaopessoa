@@ -125,6 +125,22 @@ const ProjectCard = ({ project }) => {
                   : 'Quartos: Consulte'}
             </span>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-main)', fontSize: '0.9rem' }}>
+            <span>🚿</span>
+            <span>
+              {project.summary?.min_bathrooms
+                ? `A partir de ${project.summary.min_bathrooms} Banheiros`
+                : 'Banheiros: Consulte'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-main)', fontSize: '0.9rem' }}>
+            <span>🚗</span>
+            <span>
+              {project.summary?.min_parking_spots
+                ? `A partir de ${project.summary.min_parking_spots} Vagas`
+                : 'Vagas: Consulte'}
+            </span>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-main)', fontSize: '0.9rem', fontWeight: '600' }}>
             <span>💰</span>
             <span>

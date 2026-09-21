@@ -69,6 +69,8 @@ def save_project_to_firestore(result, url: str, db):
         min_area = float('inf')
         max_area = float('-inf')
         min_beds = float('inf')
+        min_bathrooms = float('inf')
+        min_parking = float('inf')
         min_price = float('inf')
 
         for unit in units:
@@ -77,6 +79,10 @@ def save_project_to_firestore(result, url: str, db):
                 max_area = max(max_area, unit['area_m2'])
             if unit.get('bedrooms') is not None:
                 min_beds = min(min_beds, unit['bedrooms'])
+            if unit.get('bathrooms') is not None:
+                min_bathrooms = min(min_bathrooms, unit['bathrooms'])
+            if unit.get('parking_spots') is not None:
+                min_parking = min(min_parking, unit['parking_spots'])
             if unit.get('snapshots') and len(unit['snapshots']) > 0 and unit['snapshots'][0].get('price_brl') is not None:
                 min_price = min(min_price, unit['snapshots'][0]['price_brl'])
 
@@ -87,6 +93,10 @@ def save_project_to_firestore(result, url: str, db):
             summary['max_area_m2'] = max_area
         if min_beds != float('inf'):
             summary['min_bedrooms'] = min_beds
+        if min_bathrooms != float('inf'):
+            summary['min_bathrooms'] = min_bathrooms
+        if min_parking != float('inf'):
+            summary['min_parking_spots'] = min_parking
         if min_price != float('inf'):
             summary['min_price_brl'] = min_price
 
