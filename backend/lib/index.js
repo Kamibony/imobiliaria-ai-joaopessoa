@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runGeoMigration = exports.whatsappWebhook = exports.ingestPdf = exports.askConcierge = void 0;
+exports.seedBrokers = exports.runGeoMigration = exports.whatsappWebhook = exports.ingestPdf = exports.askConcierge = void 0;
 const zod_to_json_schema_1 = require("zod-to-json-schema");
 const zod_1 = require("zod");
 const vertexai_1 = require("@google-cloud/vertexai");
@@ -93,7 +93,7 @@ const https_2 = require("firebase-functions/v2/https");
 let catalogCache = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-async function getConciergeSystemPrompt() {
+async function getConciergeSystemPrompt(brokerContext) {
     // Refresh cache if needed
     const now = Date.now();
     if (!catalogCache || (now - lastCacheTime > CACHE_TTL_MS)) {
@@ -118,8 +118,14 @@ async function getConciergeSystemPrompt() {
         lastCacheTime = now;
         console.log(`Concierge catalog cache refreshed with ${catalogCache.length} active projects.`);
     }
+    let basePersona = `You are the elite "O Exclusivo" Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa, etc.).`;
+    let contactInfo = `aim to guide the user towards booking a viewing or speaking with a human broker.`;
+    if (brokerContext) {
+        basePersona = `You are the exclusive AI Real Estate Concierge representing ${brokerContext.name}, an elite real estate broker from ${brokerContext.agency_name || 'O Exclusivo'}. The broker's CRECI is ${brokerContext.creci || 'not provided'}. If relevant, you can mention their Instagram: ${brokerContext.instagram_handle || ''}.`;
+        contactInfo = `always aim to guide the user towards booking a viewing or speaking directly with ${brokerContext.name} on WhatsApp at ${brokerContext.whatsapp}.`;
+    }
     const systemPrompt = `
-      You are the elite "O Exclusivo" Real Estate Concierge for João Pessoa (Cabo Branco, Tambaú, Bessa, etc.).
+      ${basePersona}
       You must maintain a highly professional, objective, and premium tone. Do not use overly casual language.
       Focus on ROI for digital nomads and luxury for High-Net-Worth Individuals (UHNWI).
       You should utilize the structured summaries provided (like minimum price, bedrooms, neighborhood, ROI, local advantages) to give intelligent, hyper-local advice.
@@ -127,22 +133,18 @@ async function getConciergeSystemPrompt() {
       You must ONLY recommend properties that are present in the following injected JSON catalog:
       ${JSON.stringify(catalogCache)}
 
-      When you decide to recommend a specific property from the catalog, you MUST output a tag exactly like this:
-      [RECOMMENDATION: project-slug]
-      Replace "project-slug" with the actual 'id' of the property from the catalog.
-
-      If the user is ready to proceed or has high intent, seamlessly guide them to use the "Falar com Corretor" button.
-      Keep your responses concise and in Brazilian Portuguese.
+      If a user asks for properties outside of this catalog or criteria you don't have, politely state you don't have that in your current premium portfolio.
+      Keep responses relatively concise, focused on highlights, and ${contactInfo}
     `;
     return systemPrompt;
 }
 exports.askConcierge = (0, https_2.onCall)({ cors: true, maxInstances: 5 }, async (request) => {
     try {
-        const { chatHistory } = request.data;
+        const { chatHistory, brokerContext } = request.data;
         if (!chatHistory || !Array.isArray(chatHistory)) {
             throw new Error("Invalid chat history");
         }
-        const systemPrompt = await getConciergeSystemPrompt();
+        const systemPrompt = await getConciergeSystemPrompt(brokerContext);
         const model = getVertexAi().getGenerativeModel({
             model: "gemini-2.5-flash",
             systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
@@ -870,6 +872,25 @@ exports.runGeoMigration = (0, https_1.onRequest)({ timeoutSeconds: 300, secrets:
     catch (error) {
         console.error('Migration failed:', error);
         response.status(500).json({ error: 'Migration failed due to internal error.' });
+    }
+});
+exports.seedBrokers = (0, https_1.onRequest)(async (request, response) => {
+    try {
+        const demoBroker = {
+            slug: "virtual-corretor",
+            name: "João Silva",
+            creci: "12345-F",
+            whatsapp: "5511999999999",
+            photo_url: "https://i.pravatar.cc/300",
+            agency_name: "Imobiliária Luxo",
+            instagram_handle: "@joaosilvacorretor"
+        };
+        await db.collection("brokers").doc(demoBroker.slug).set(demoBroker);
+        response.status(200).json({ message: "Seed broker created successfully", broker: demoBroker });
+    }
+    catch (error) {
+        console.error("Error seeding brokers:", error);
+        response.status(500).json({ error: "Failed to seed broker" });
     }
 });
 //# sourceMappingURL=index.js.map

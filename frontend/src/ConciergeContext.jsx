@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+import { useBroker } from './BrokerContext';
 
 const ConciergeContext = createContext();
 
@@ -14,6 +15,7 @@ export const ConciergeProvider = ({ children }) => {
     { role: 'ai', text: 'Olá! Sou o Concierge Exclusivo de João Pessoa. Posso ajudar você a encontrar o imóvel ideal com base nas suas preferências de estilo de vida e objetivos de investimento. O que você procura hoje?' }
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const { broker } = useBroker();
 
   const toggleDrawer = () => setIsOpen(!isOpen);
 
@@ -27,7 +29,8 @@ export const ConciergeProvider = ({ children }) => {
 
     try {
       const askConcierge = httpsCallable(functions, 'askConcierge');
-      const result = await askConcierge({ chatHistory: newHistory });
+      console.log('Sending broker context to AI:', broker);
+      const result = await askConcierge({ chatHistory: newHistory, brokerContext: broker });
 
       const aiResponse = { role: 'ai', text: result.data.response };
       setChatHistory(prev => [...prev, aiResponse]);

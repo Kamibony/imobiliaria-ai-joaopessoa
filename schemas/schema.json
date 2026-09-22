@@ -409,6 +409,51 @@
         "name"
       ],
       "additionalProperties": false
+    },
+    "Broker": {
+      "title": "Broker",
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "creci": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "whatsapp": {
+          "type": "string"
+        },
+        "photo_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agency_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instagram_handle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "whatsapp"
+      ],
+      "additionalProperties": false
     }
   },
   "properties": {
@@ -423,6 +468,9 @@
     },
     "aiContext": {
       "$ref": "#/definitions/AiContext"
+    },
+    "broker": {
+      "$ref": "#/definitions/Broker"
     }
   },
   "additionalProperties": false

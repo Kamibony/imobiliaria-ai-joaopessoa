@@ -6,15 +6,18 @@ import './index.css'
 import App from './App.jsx'
 import { LanguageProvider } from './LanguageContext'
 import { MapStateProvider } from './MapStateContext'
+import { BrokerProvider } from './BrokerContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'dummy_key'}>
       <BrowserRouter>
         <LanguageProvider>
+          <BrokerProvider>
           <MapStateProvider>
             <App />
           </MapStateProvider>
+                  </BrokerProvider>
         </LanguageProvider>
       </BrowserRouter>
     </APIProvider>

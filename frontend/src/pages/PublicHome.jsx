@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { useLanguage, getLocalizedText } from '../LanguageContext';
 import { useNavigate } from 'react-router-dom';
+import { useBroker } from '../BrokerContext';
 
 const ProjectCard = ({ project }) => {
   const { language } = useLanguage();
@@ -157,6 +158,7 @@ const ProjectCard = ({ project }) => {
 
 const PublicHome = () => {
   const { language } = useLanguage();
+  const { broker } = useBroker();
   const [projects, setProjects] = useState([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -196,11 +198,24 @@ const PublicHome = () => {
   return (
     <div className="public-home fade-in" style={{ pointerEvents: 'none' }}>
       {/* Top Floating Header */}
-      <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40, padding: '1.5rem', textAlign: 'center', pointerEvents: 'auto', backdropFilter: 'blur(10px)', backgroundColor: 'rgba(17, 17, 17, 0.7)' }}>
-        <h1 style={{ color: 'white', fontSize: '1.5rem', margin: 0, fontFamily: 'var(--font-serif)', letterSpacing: '0.05em' }}>
-          O Exclusivo de João Pessoa
-        </h1>
-        <span className="text-sm font-medium text-gray-300">{filteredProjects.length} Empreendimentos Premium</span>
+      <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40, padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', pointerEvents: 'auto', backdropFilter: 'blur(10px)', backgroundColor: 'rgba(17, 17, 17, 0.7)' }}>
+        <div style={{ textAlign: 'left' }}>
+          <h1 style={{ color: 'white', fontSize: '1.5rem', margin: 0, fontFamily: 'var(--font-serif)', letterSpacing: '0.05em' }}>
+            {broker ? broker.agency_name || 'O Exclusivo' : 'O Exclusivo de João Pessoa'}
+          </h1>
+          <span className="text-sm font-medium text-gray-300">{filteredProjects.length} Empreendimentos Premium</span>
+        </div>
+        {broker && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ textAlign: 'right', color: 'white' }}>
+              <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{broker.name}</div>
+              <div style={{ fontSize: '0.75rem', color: '#c5a880' }}>CRECI: {broker.creci || '-'}</div>
+            </div>
+            {broker.photo_url && (
+              <img src={broker.photo_url} alt={broker.name} style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #c5a880', objectFit: 'cover' }} />
+            )}
+          </div>
+        )}
       </header>
 
       {/* Bottom Floating Toggle Button */}
