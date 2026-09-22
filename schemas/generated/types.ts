@@ -10,6 +10,7 @@ export interface RealEstateData {
   unit?: Unit;
   propertySnapshot?: PropertySnapshot;
   aiContext?: AiContext1;
+  broker?: Broker;
 }
 export interface Project {
   id?: string | null;
@@ -128,4 +129,13 @@ export interface AiContext1 {
     "pt-BR"?: string | null;
     en?: string | null;
   } | null;
+}
+export interface Broker {
+  slug: string;
+  name: string;
+  creci?: string | null;
+  whatsapp: string;
+  photo_url?: string | null;
+  agency_name?: string | null;
+  instagram_handle?: string | null;
 }

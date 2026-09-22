@@ -5,10 +5,12 @@ import { db } from '../firebase';
 import { useLanguage, getLocalizedText } from '../LanguageContext';
 import { useMapState } from '../MapStateContext';
 import { useConcierge } from '../ConciergeContext';
+import { useBroker } from '../BrokerContext';
 import { FaBuilding, FaInfoCircle, FaCalendarAlt, FaMapMarkerAlt, FaCheck, FaChartLine } from 'react-icons/fa';
 
 const PublicProjectDetail = () => {
   const { id } = useParams();
+  const { broker } = useBroker();
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { flyToProject } = useMapState();
@@ -78,11 +80,11 @@ const PublicProjectDetail = () => {
   };
 
   const handleWhatsAppContact = (unit, priceFormatted) => {
-    const phoneNumber = '5583999999999'; // Dummy number as requested
-    const message = `Olá, tenho interesse no apartamento ${unit.unit_number || unit.id} do empreendimento ${project.name || 'Sem Título'}, no valor de ${priceFormatted}.`;
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-    window.open(whatsappUrl, '_blank');
+    const contactNumber = broker?.whatsapp || '5583999999999';
+    const brokerContext = broker ? ` (Visto com corretor ${broker.name})` : '';
+    const message = `Olá! Gostaria de mais informações sobre a Unidade ${unit.unit_number || unit.id} do empreendimento ${project.name || 'Sem Título'}${brokerContext}.
+Preço listado: ${priceFormatted}`;
+    window.open(`https://wa.me/${contactNumber}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   return (
