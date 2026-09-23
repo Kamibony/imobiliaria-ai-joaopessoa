@@ -1,6 +1,102 @@
 import ErrorBoundary from '../ErrorBoundary';
 import { LanguageProvider, useLanguage, getLocalizedText } from '../LanguageContext';
 import React, { useState, useEffect, useMemo } from 'react'
+
+const BrokersTab = ({ brokers, db, editingBroker, setEditingBroker }) => {
+  const [formData, setFormData] = useState({
+    slug: '', name: '', creci: '', whatsapp: '', photo_url: '', agency_name: '', instagram_handle: ''
+  });
+
+  useEffect(() => {
+    if (editingBroker) {
+      setFormData(editingBroker);
+    } else {
+      setFormData({ slug: '', name: '', creci: '', whatsapp: '', photo_url: '', agency_name: '', instagram_handle: '' });
+    }
+  }, [editingBroker]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.slug || !formData.name || !formData.whatsapp) {
+      alert("Slug, Nome e WhatsApp são obrigatórios.");
+      return;
+    }
+
+    try {
+      const docRef = doc(db, 'brokers', formData.slug);
+      await setDoc(docRef, formData);
+      alert(editingBroker ? "Corretor atualizado!" : "Corretor adicionado!");
+      setEditingBroker(null);
+      setFormData({ slug: '', name: '', creci: '', whatsapp: '', photo_url: '', agency_name: '', instagram_handle: '' });
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar corretor.");
+    }
+  };
+
+  const handleDelete = async (slug) => {
+    if(window.confirm("Deseja deletar este corretor?")) {
+      try {
+        await deleteDoc(doc(db, 'brokers', slug));
+        alert("Deletado com sucesso.");
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao deletar.");
+      }
+    }
+  };
+
+  return (
+    <div className="w-full max-w-4xl flex flex-col gap-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-xl font-semibold mb-4">{editingBroker ? "Editar Corretor" : "Adicionar Corretor"}</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <input type="text" placeholder="Slug (ID) *" value={formData.slug} onChange={(e) => setFormData({...formData, slug: e.target.value})} disabled={!!editingBroker} className="border p-2 rounded" />
+            <input type="text" placeholder="Nome *" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="border p-2 rounded" />
+            <input type="text" placeholder="WhatsApp *" value={formData.whatsapp} onChange={(e) => setFormData({...formData, whatsapp: e.target.value})} className="border p-2 rounded" />
+            <input type="text" placeholder="CRECI" value={formData.creci} onChange={(e) => setFormData({...formData, creci: e.target.value})} className="border p-2 rounded" />
+            <input type="text" placeholder="Foto URL" value={formData.photo_url} onChange={(e) => setFormData({...formData, photo_url: e.target.value})} className="border p-2 rounded" />
+            <input type="text" placeholder="Nome da Agência" value={formData.agency_name} onChange={(e) => setFormData({...formData, agency_name: e.target.value})} className="border p-2 rounded" />
+            <input type="text" placeholder="Instagram (@)" value={formData.instagram_handle} onChange={(e) => setFormData({...formData, instagram_handle: e.target.value})} className="border p-2 rounded" />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">{editingBroker ? "Atualizar" : "Salvar"}</button>
+            {editingBroker && <button type="button" onClick={() => setEditingBroker(null)} className="px-4 py-2 bg-gray-400 text-white rounded">Cancelar</button>}
+          </div>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-xl font-semibold mb-4">Lista de Corretores</h2>
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr>
+              <th className="border-b p-2">Slug</th>
+              <th className="border-b p-2">Nome</th>
+              <th className="border-b p-2">WhatsApp</th>
+              <th className="border-b p-2">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {brokers.map(b => (
+              <tr key={b.id} className="hover:bg-gray-50">
+                <td className="border-b p-2">{b.slug}</td>
+                <td className="border-b p-2">{b.name}</td>
+                <td className="border-b p-2">{b.whatsapp}</td>
+                <td className="border-b p-2">
+                  <button onClick={() => setEditingBroker(b)} className="text-blue-600 mr-2">Editar</button>
+                  <button onClick={() => handleDelete(b.slug)} className="text-red-600">Deletar</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 import { collection, onSnapshot, deleteDoc, doc, getDocs, updateDoc, setDoc } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 import { getStorage, ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage'
@@ -412,6 +508,8 @@ function Admin() {
   const [activeTab, setActiveTab] = useState('upload')
   const [projects, setProjects] = useState([])
   const [pdfJobs, setPdfJobs] = useState([]);
+  const [brokers, setBrokers] = useState([]);
+  const [editingBroker, setEditingBroker] = useState(null);
 
   const [auditSourceUrl, setAuditSourceUrl] = useState(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
@@ -551,6 +649,16 @@ function Admin() {
     return () => {
       unsubscribeProps();
     };
+  }, [user]);
+
+
+  useEffect(() => {
+    if (!user) return;
+    const brokersRef = collection(db, 'brokers');
+    const unsubscribeBrokers = onSnapshot(brokersRef, (snapshot) => {
+      setBrokers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribeBrokers();
   }, [user]);
 
   const handleLogin = async (e) => {
@@ -748,6 +856,12 @@ function Admin() {
           1. Ingestão de PDFs
         </button>
         <button
+          className={`px-4 py-2 font-medium rounded-t-lg focus:outline-none transition-colors border-t border-l border-r ${activeTab === 'corretores' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+          onClick={() => setActiveTab('corretores')}
+        >
+          4. Corretores
+        </button>
+        <button
           className={`px-4 py-2 font-medium rounded-t-lg focus:outline-none transition-colors border-t border-l border-r ${activeTab === 'catalogo-mapa' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
           onClick={() => setActiveTab('catalogo-mapa')}
         >
@@ -760,6 +874,10 @@ function Admin() {
           3. Staging (Revisão)
         </button>
       </div>
+
+      {activeTab === 'corretores' && (
+        <BrokersTab brokers={brokers} db={db} editingBroker={editingBroker} setEditingBroker={setEditingBroker} />
+      )}
 
       {activeTab === 'upload' && (
         <div className="w-full max-w-4xl flex flex-col gap-6">
