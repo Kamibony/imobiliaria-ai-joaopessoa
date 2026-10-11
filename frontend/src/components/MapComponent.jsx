@@ -18,7 +18,7 @@ const MapComponentInner = () => {
 };
 
 const MapComponent = ({ children }) => {
-  const [mapType, setMapType] = useState('roadmap');
+  const [mapType, setMapType] = useState('hybrid');
   // Using a custom Map ID configured in Google Cloud Console
   // We expect this mapId to have styling applied (dark background, gold roads, hidden POIs)
   const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "cad1b1a245eea208d67502a4";
