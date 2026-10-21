@@ -19,10 +19,15 @@ const ProjectCard = ({ project }) => {
     } else if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
       const fetchHeroImage = async () => {
         try {
-          const storage = getStorage();
-          const fileRef = ref(storage, project.assets.hero_images[0]);
-          const downloadURL = await getDownloadURL(fileRef);
-          setHeroImageUrl(downloadURL);
+          const heroImage = project.assets.hero_images[0];
+          if (heroImage.startsWith('http://') || heroImage.startsWith('https://')) {
+            setHeroImageUrl(heroImage);
+          } else {
+            const storage = getStorage();
+            const fileRef = ref(storage, heroImage);
+            const downloadURL = await getDownloadURL(fileRef);
+            setHeroImageUrl(downloadURL);
+          }
         } catch (error) {
           console.error("Error fetching hero image URL:", error);
         }
