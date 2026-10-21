@@ -28,10 +28,15 @@ const PropertySuggestionCard = ({ slug }) => {
           if (data.manual_hero_image_url) {
             setHeroImageUrl(data.manual_hero_image_url);
           } else if (data.assets?.hero_images && data.assets.hero_images.length > 0) {
-            const storage = getStorage();
-            const fileRef = ref(storage, data.assets.hero_images[0]);
-            const downloadURL = await getDownloadURL(fileRef);
-            setHeroImageUrl(downloadURL);
+            const heroImage = data.assets.hero_images[0];
+            if (heroImage.startsWith('http://') || heroImage.startsWith('https://')) {
+              setHeroImageUrl(heroImage);
+            } else {
+              const storage = getStorage();
+              const fileRef = ref(storage, heroImage);
+              const downloadURL = await getDownloadURL(fileRef);
+              setHeroImageUrl(downloadURL);
+            }
           }
         }
       } catch (e) {

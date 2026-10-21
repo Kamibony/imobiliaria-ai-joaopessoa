@@ -9,6 +9,7 @@ const BrokersTab = ({ brokers, db, editingBroker, setEditingBroker }) => {
 
   useEffect(() => {
     if (editingBroker) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData(editingBroker);
     } else {
       setFormData({ slug: '', name: '', creci: '', whatsapp: '', photo_url: '', agency_name: '', instagram_handle: '' });
@@ -125,10 +126,15 @@ const ProjectDetailModal = ({ project, onClose, onVerifySource, onDelete }) => {
     } else if (project?.assets?.hero_images && project.assets.hero_images.length > 0) {
       const fetchHeroImage = async () => {
         try {
-          const storage = getStorage();
-          const fileRef = ref(storage, project.assets.hero_images[0]);
-          const downloadURL = await getDownloadURL(fileRef);
-          setHeroImageUrl(downloadURL);
+          const heroImage = project.assets.hero_images[0];
+          if (heroImage.startsWith('http://') || heroImage.startsWith('https://')) {
+            setHeroImageUrl(heroImage);
+          } else {
+            const storage = getStorage();
+            const fileRef = ref(storage, heroImage);
+            const downloadURL = await getDownloadURL(fileRef);
+            setHeroImageUrl(downloadURL);
+          }
         } catch (error) {
           console.error("Error fetching hero image URL:", error);
         }
